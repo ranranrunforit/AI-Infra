@@ -2,9 +2,7 @@
 #
 # This Dockerfile creates a container image for the model inference API.
 # It uses multi-stage builds to optimize image size and build time.
-#
-# Author: AI Infrastructure Curriculum
-# License: MIT
+
 
 # TODO: Implement Dockerfile
 # This is a STUB file with comprehensive instructions.
