@@ -4,8 +4,6 @@ Configuration Management Module
 This module handles all application configuration including environment
 variables, defaults, and validation.
 
-Author: AI Infrastructure Curriculum
-License: MIT
 """
 
 import os
