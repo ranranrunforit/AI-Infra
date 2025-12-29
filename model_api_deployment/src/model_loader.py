@@ -4,8 +4,6 @@ Model Loader Module
 This module handles loading pre-trained models, preprocessing images,
 and generating predictions.
 
-Author: AI Infrastructure Curriculum
-License: MIT
 """
 
 import logging
