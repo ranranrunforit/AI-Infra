@@ -4,9 +4,6 @@ API Endpoint Tests
 This module contains unit tests for the REST API endpoints.
 
 Run tests with: pytest tests/test_app.py
-
-Author: AI Infrastructure Curriculum
-License: MIT
 """
 
 import pytest
