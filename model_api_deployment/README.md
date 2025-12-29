@@ -175,10 +175,10 @@ Before starting this project, ensure you have:
 
    # Create Python virtual environment
    python3.11 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate  # On Windows: .\venv\Scripts\Activate.ps1 
 
-   # Install dependencies (you'll create this file)
-   pip install flask torch torchvision pillow python-dotenv pytest
+   # Install dependencies (Create a requirements.txt file)
+   pip install -r requirements.txt
    ```
 
 3. **Review the Code Stubs**
@@ -195,13 +195,23 @@ Before starting this project, ensure you have:
 
 5. **Test Locally**
    ```bash
+   # Build Configuration Module
+   python src/config.py
+
+   # Build Model Loader
+   python src/model_loader.py
+
+   # Test with an image (download a sample first)
+   curl -o test_dog.jpg https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=500
+   python src/model_loader.py test_dog.jpg
+   
    # Run the application
    python src/app.py
 
    # In another terminal, test the endpoints
    curl http://localhost:5000/health
    curl http://localhost:5000/info
-   curl -X POST -F "file=@test_image.jpg" http://localhost:5000/predict
+   curl.exe -X POST -F "file=@test_image.jpg" http://localhost:5000/predict
 
    # Run tests
    pytest tests/
@@ -217,6 +227,10 @@ Before starting this project, ensure you have:
 
    # Or use Docker Compose
    docker-compose -f docker/docker-compose.yml up
+
+   # Write Tests
+   pytest tests/test_app.py -v
+   pytest tests/test_model.py -v
    ```
 
 7. **Deploy to Cloud**
