@@ -3,8 +3,6 @@ Model API Application
 
 This module implements the REST API for model inference using Flask.
 
-Author: AI Infrastructure Curriculum
-License: MIT
 """
 
 import io
