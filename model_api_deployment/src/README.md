@@ -601,21 +601,3 @@ image = Image.open(io.BytesIO(file_bytes))
 5. **Test locally** - Run the server and test with cURL/Postman
 6. **Write unit tests** - Ensure code quality
 7. **Containerize** - Move to Docker phase
-
----
-
-## Getting Help
-
-- Read the TODO comments in each stub file carefully
-- Reference the architecture.md for system design
-- Check official documentation (Flask, PyTorch, etc.)
-- Test each component before moving to the next
-- Use print statements liberally during development
-- Ask for help in office hours if stuck
-
----
-
-**Good luck with your implementation!**
-
-**Document Version:** 1.0
-**Last Updated:** October 2025
