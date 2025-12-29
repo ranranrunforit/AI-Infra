@@ -1,9 +1,5 @@
 # Project 01: System Architecture
 
-**Project:** Simple Model API Deployment
-**Role:** Junior AI Infrastructure Engineer
-**Version:** 1.0
-
 ---
 
 ## Table of Contents
