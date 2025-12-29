@@ -1,12 +1,5 @@
 # Project 01: Simple Model API Deployment
 
-**Role:** Junior AI Infrastructure Engineer (Entry Level)
-**Duration:** 60 hours (1-2 weeks full-time, 2-3 weeks part-time)
-**Complexity:** Beginner
-**Prerequisites:** Basic Python knowledge, familiarity with command line
-
----
-
 ## Project Overview
 
 Welcome to your first AI Infrastructure project! In this project, you'll build and deploy a REST API that serves predictions from a pre-trained machine learning model. This is a foundational skill that every AI Infrastructure Engineer must master.
