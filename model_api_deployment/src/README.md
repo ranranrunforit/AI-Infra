@@ -1,6 +1,6 @@
 # Source Code Implementation Guide
 
-**Project:** Simple Model API Deployment
+**Project:** Model API Deployment
 **Directory:** `src/`
 
 ---
