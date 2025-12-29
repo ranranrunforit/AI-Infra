@@ -1,4 +1,4 @@
-# Project 01: Simple Model API Deployment
+# Project 01: Model API Deployment
 
 ## Project Overview
 
