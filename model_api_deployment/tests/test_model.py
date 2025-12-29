@@ -5,8 +5,6 @@ This module contains unit tests for the model loading and inference functionalit
 
 Run tests with: pytest tests/test_model.py
 
-Author: AI Infrastructure Curriculum
-License: MIT
 """
 import pytest
 from PIL import Image
