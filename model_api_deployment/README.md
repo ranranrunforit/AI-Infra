@@ -44,12 +44,6 @@ By completing this project, you will:
 - **Docker 24.0+** - Containerization platform
 - **Cloud Platform** - AWS EC2, GCP Compute Engine, or Azure VM
 
-### Recommended Tools
-- **VS Code** with Python extension for development
-- **Postman or cURL** for API testing
-- **Git/GitHub** for version control
-- **Docker Desktop** for local container testing
-
 ---
 
 ## Project Requirements
@@ -63,12 +57,6 @@ By completing this project, you will:
 - Return top-5 predictions with class names and confidence scores
 - Handle model loading errors gracefully
 
-**Acceptance Criteria:**
-- Model loads successfully on application startup
-- Inference latency < 500ms for 224x224 images (CPU)
-- Returns properly formatted JSON response
-- Handles invalid image formats with HTTP 400 error
-
 #### FR-2: REST API Implementation
 - **`/predict`** endpoint for single-image inference
 - **`/health`** endpoint for health checks
@@ -76,22 +64,12 @@ By completing this project, you will:
 - Support multipart/form-data for image upload
 - Request validation (file size limits, format checks)
 
-**Acceptance Criteria:**
-- All 3 endpoints respond correctly
-- API follows RESTful conventions
-- Request/response format documented
-- Returns appropriate HTTP status codes
-
 #### FR-3: Error Handling
 - Structured error responses with error codes
 - Handle out-of-memory errors gracefully
 - Validate image inputs (corrupted, wrong format, too large)
 - Implement request timeout handling (30 seconds max)
 
-**Acceptance Criteria:**
-- All error cases tested and handled
-- No crashes on invalid input
-- Clear error messages returned to users
 
 ### Non-Functional Requirements
 
