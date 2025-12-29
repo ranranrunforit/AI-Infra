@@ -211,10 +211,11 @@ Before starting this project, ensure you have:
    # In another terminal, test the endpoints
    curl http://localhost:5000/health
    curl http://localhost:5000/info
-   curl.exe -X POST -F "file=@test_image.jpg" http://localhost:5000/predict
+   curl.exe -X POST -F "file=@test_dog.jpg" http://localhost:5000/predict
 
    # Run tests
-   pytest tests/
+   pytest tests/test_app.py -v
+   pytest tests/test_model.py -v
    ```
 
 6. **Containerize**
@@ -227,10 +228,6 @@ Before starting this project, ensure you have:
 
    # Or use Docker Compose
    docker-compose -f docker/docker-compose.yml up
-
-   # Write Tests
-   pytest tests/test_app.py -v
-   pytest tests/test_model.py -v
    ```
 
 7. **Deploy to Cloud**
