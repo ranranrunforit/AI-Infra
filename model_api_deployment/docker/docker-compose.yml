@@ -3,9 +3,6 @@
 # This file defines the services for local development and testing.
 # Docker Compose makes it easy to run multi-container applications.
 #
-# Author: AI Infrastructure Curriculum
-# License: MIT
-#
 # Usage:
 #   Start: docker-compose up
 #   Stop: docker-compose down
