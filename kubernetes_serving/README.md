@@ -1,9 +1,5 @@
 # Project 02: Kubernetes Model Serving
 
-**Duration:** 80 hours (2 weeks full-time, 3-4 weeks part-time)
-**Complexity:** Beginner+
-**Prerequisites:** Project 01 (Simple Model API Deployment)
-
 ---
 
 ## Overview
@@ -468,67 +464,6 @@ Before starting this project, ensure you have:
      - Rolling update with zero downtime
      - Monitoring dashboards
 
----
-
-## Assessment Criteria
-
-Your project will be evaluated on:
-
-### Kubernetes Configuration (30%)
-- Properly configured Deployment with health checks
-- Correct Service and Ingress setup
-- Working auto-scaling with appropriate thresholds
-- Proper resource management
-
-### Monitoring & Observability (20%)
-- Prometheus metrics collection
-- Informative Grafana dashboards
-- Meaningful alerts
-- Application-level metrics
-
-### Helm Chart (20%)
-- Well-structured chart with reusable templates
-- Comprehensive and documented values.yaml
-- Flexibility for different environments
-- Clear documentation
-
-### Operations (15%)
-- Smooth rolling updates
-- Quick rollback capability
-- Responsive auto-scaling
-- Clear operational procedures
-
-### Performance (15%)
-- Meets latency requirements under load
-- Efficient resource utilization
-- Proper scaling behavior
-- Handles traffic spikes
-
-**Passing Score:** 70/100
-
----
-
-## Resources
-
-### Official Documentation
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [Helm Documentation](https://helm.sh/docs/)
-- [Prometheus Documentation](https://prometheus.io/docs/)
-- [Grafana Documentation](https://grafana.com/docs/)
-
-### Recommended Tutorials
-- [Kubernetes Basics Tutorial](https://kubernetes.io/docs/tutorials/kubernetes-basics/)
-- [HPA Walkthrough](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/)
-- [Helm Quickstart](https://helm.sh/docs/intro/quickstart/)
-
-### Books
-- "Kubernetes Up & Running" by Kelsey Hightower
-- "The Kubernetes Book" by Nigel Poulton
-
-### Tools
-- [K9s](https://k9scli.io/) - Terminal UI for Kubernetes
-- [Lens](https://k8slens.dev/) - Kubernetes IDE
-- [k6](https://k6.io/) - Load testing tool
 
 ---
 
@@ -552,27 +487,6 @@ Your project will be evaluated on:
 6. **Document as you go**: Future you will be grateful
 7. **Load test thoroughly**: Find your limits before production traffic
 
----
-
-## Support
-
-If you encounter issues:
-
-1. **Check TROUBLESHOOTING.md** for common problems
-2. **Review Kubernetes logs**: `kubectl logs <pod-name>`
-3. **Describe resources**: `kubectl describe pod <pod-name>`
-4. **Check events**: `kubectl get events --sort-by='.lastTimestamp'`
-5. **Use monitoring dashboards**: Check Grafana for anomalies
-
----
-
-## Next Steps
-
-After completing this project, you'll be ready for:
-
-- **Project 03**: Advanced monitoring and observability
-- **Project 04**: CI/CD pipeline for model deployments
-- **Project 05**: Multi-model serving with traffic routing
 
 ---
 
