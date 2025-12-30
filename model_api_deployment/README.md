@@ -153,7 +153,10 @@ Before starting this project, ensure you have:
 
    # Create Python virtual environment
    python3.11 -m venv venv
-   source venv/bin/activate  # On Windows: .\venv\Scripts\Activate.ps1 
+   source venv/bin/activate
+   # On Windows:
+   PowerShell: .\venv\Scripts\Activate.ps1
+   Command Prompt (cmd): venv\Scripts\activate 
 
    # Install dependencies (Create a requirements.txt file)
    pip install -r requirements.txt
