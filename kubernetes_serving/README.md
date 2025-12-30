@@ -241,18 +241,7 @@ Before starting this project, ensure you have:
 
 1. **Install Kubernetes Tools**
    ```bash
-   # Install kubectl
-   curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-   sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-
-   # Install Minikube
-   curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-   sudo install minikube-linux-amd64 /usr/local/bin/minikube
-
-   # Install Helm
-   curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-   # on Windows powershell
+   # on Windows PowerShell
    # Install kubectl
    winget install Kubernetes.kubectl
 
@@ -268,7 +257,7 @@ Before starting this project, ensure you have:
    cd project-02-kubernetes-serving
 
    # Install Python dependencies
-   pip install -r src/requirements.txt
+   pip install -r requirements.txt
 
    # Copy environment template
    cp .env.example .env
