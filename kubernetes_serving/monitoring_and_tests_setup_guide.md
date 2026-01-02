@@ -45,6 +45,8 @@ minikube addons enable ingress
 # Verify
 kubectl get nodes
 kubectl get pods -A
+
+
 ```
 
 ---
