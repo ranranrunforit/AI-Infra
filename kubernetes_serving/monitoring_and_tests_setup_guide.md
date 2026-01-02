@@ -46,6 +46,11 @@ minikube addons enable ingress
 kubectl get nodes
 kubectl get pods -A
 
+# Build Docker image
+docker build -f docker/Dockerfile -t model-api:v1.0 .
+
+# Load Docker image into Minikube
+minikube image load model-api:v1.0
 
 ```
 

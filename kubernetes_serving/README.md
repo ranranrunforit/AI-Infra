@@ -1,5 +1,9 @@
 # Project 02: Kubernetes Model Serving
 
+**Duration:** 80 hours (2 weeks full-time, 3-4 weeks part-time)
+**Complexity:** Beginner+
+**Prerequisites:** Project 01 (Simple Model API Deployment)
+
 ---
 
 ## Overview
@@ -122,6 +126,13 @@ By completing this project, you will be able to:
 | **Ingress** | NGINX Ingress Controller | HTTP routing and load balancing |
 | **CLI Tools** | kubectl, helm | Cluster management |
 
+### Recommended Tools
+
+- **K9s** - Terminal UI for Kubernetes cluster management
+- **Lens** - Kubernetes IDE with visual cluster exploration
+- **kubectx/kubens** - Quick context and namespace switching
+- **stern** - Multi-pod log tailing
+- **k6** - Load testing tool
 
 ---
 
@@ -241,15 +252,32 @@ Before starting this project, ensure you have:
 
 1. **Install Kubernetes Tools**
    ```bash
-   # on Windows PowerShell
    # Install kubectl
-   winget install Kubernetes.kubectl
+   curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+   sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
    # Install Minikube
-   winget install Kubernetes.minikube
+   curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+   sudo install minikube-linux-amd64 /usr/local/bin/minikube
 
    # Install Helm
+   curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+   # on Windows powershell
+   # 1. Install Minikube (if not installed)
+   winget install Kubernetes.minikube
+
+   # 2. Install kubectl
+   winget install Kubernetes.kubectl
+
+   # 3. Install Helm
    winget install Helm.Helm
+
+   # 4. Install K6 (for load testing)
+   winget install k6
+
+   # 5. Python packages
+   pip install kubernetes pytest requests
    ```
 
 2. **Clone Project and Install Dependencies**
@@ -257,7 +285,7 @@ Before starting this project, ensure you have:
    cd project-02-kubernetes-serving
 
    # Install Python dependencies
-   pip install -r requirements.txt
+   pip install -r src/requirements.txt
 
    # Copy environment template
    cp .env.example .env
@@ -280,17 +308,17 @@ Before starting this project, ensure you have:
    # Start Minikube with sufficient resources
    minikube start --cpus=4 --memory=8192 --driver=docker
 
-   # Verify installation
-   kubectl version
-   kubectl get nodes
-
    # Enable metrics server for HPA
    minikube addons enable metrics-server
 
    # Enable ingress controller
    minikube addons enable ingress
 
-   # Load your Docker image into Minikube
+   # Verify installation
+   kubectl version
+   kubectl get nodes
+
+   # Load Docker image into Minikube
    minikube image load model-api:v1.0
    ```
 
@@ -319,6 +347,7 @@ Before starting this project, ensure you have:
    # Watch them come up:
    kubectl get pods -n ml-serving -w
    ```
+
 
 
 6. **Test the Deployment**
@@ -445,6 +474,67 @@ Before starting this project, ensure you have:
      - Rolling update with zero downtime
      - Monitoring dashboards
 
+---
+
+## Assessment Criteria
+
+Your project will be evaluated on:
+
+### Kubernetes Configuration (30%)
+- Properly configured Deployment with health checks
+- Correct Service and Ingress setup
+- Working auto-scaling with appropriate thresholds
+- Proper resource management
+
+### Monitoring & Observability (20%)
+- Prometheus metrics collection
+- Informative Grafana dashboards
+- Meaningful alerts
+- Application-level metrics
+
+### Helm Chart (20%)
+- Well-structured chart with reusable templates
+- Comprehensive and documented values.yaml
+- Flexibility for different environments
+- Clear documentation
+
+### Operations (15%)
+- Smooth rolling updates
+- Quick rollback capability
+- Responsive auto-scaling
+- Clear operational procedures
+
+### Performance (15%)
+- Meets latency requirements under load
+- Efficient resource utilization
+- Proper scaling behavior
+- Handles traffic spikes
+
+**Passing Score:** 70/100
+
+---
+
+## Resources
+
+### Official Documentation
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [Helm Documentation](https://helm.sh/docs/)
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [Grafana Documentation](https://grafana.com/docs/)
+
+### Recommended Tutorials
+- [Kubernetes Basics Tutorial](https://kubernetes.io/docs/tutorials/kubernetes-basics/)
+- [HPA Walkthrough](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/)
+- [Helm Quickstart](https://helm.sh/docs/intro/quickstart/)
+
+### Books
+- "Kubernetes Up & Running" by Kelsey Hightower
+- "The Kubernetes Book" by Nigel Poulton
+
+### Tools
+- [K9s](https://k9scli.io/) - Terminal UI for Kubernetes
+- [Lens](https://k8slens.dev/) - Kubernetes IDE
+- [k6](https://k6.io/) - Load testing tool
 
 ---
 
@@ -468,3 +558,30 @@ Before starting this project, ensure you have:
 6. **Document as you go**: Future you will be grateful
 7. **Load test thoroughly**: Find your limits before production traffic
 
+---
+
+## Support
+
+If you encounter issues:
+
+1. **Check TROUBLESHOOTING.md** for common problems
+2. **Review Kubernetes logs**: `kubectl logs <pod-name>`
+3. **Describe resources**: `kubectl describe pod <pod-name>`
+4. **Check events**: `kubectl get events --sort-by='.lastTimestamp'`
+5. **Use monitoring dashboards**: Check Grafana for anomalies
+
+---
+
+## Next Steps
+
+After completing this project, you'll be ready for:
+
+- **Project 03**: Advanced monitoring and observability
+- **Project 04**: CI/CD pipeline for model deployments
+- **Project 05**: Multi-model serving with traffic routing
+
+---
+
+**Project Version:** 1.0
+**Last Updated:** October 2025
+**Maintained By:** AI Infrastructure Curriculum Team
