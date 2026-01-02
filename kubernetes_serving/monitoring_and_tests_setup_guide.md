@@ -413,26 +413,3 @@ kubectl exec -it <pod-name> -n ml-serving -- /bin/sh
 kubectl delete -f kubernetes/ -n ml-serving
 kubectl apply -f kubernetes/ -n ml-serving
 ```
-
----
-
-## Next Steps
-
-1. ✅ Set up monitoring (Prometheus + Grafana)
-2. ✅ Import dashboard
-3. ✅ Run integration tests
-4. ✅ Run load tests
-5. ✅ Watch auto-scaling in action
-6. 📝 Document your findings
-7. 🎥 Record demo video
-
-**Success Criteria:**
-- [ ] Grafana dashboard shows live metrics
-- [ ] All integration tests pass
-- [ ] Load test shows < 500ms p95 latency
-- [ ] HPA scales from 3 to 10 pods under load
-- [ ] Zero downtime during rolling update
-
----
-
-**Questions?** Check the main README.md or TROUBLESHOOTING.md files.
