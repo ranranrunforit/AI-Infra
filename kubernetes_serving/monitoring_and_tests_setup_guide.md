@@ -210,16 +210,6 @@ tests/test_k8s.py::TestService::test_service_exists PASSED
 =================== 20 passed, 5 skipped in 15.23s ===================
 ```
 
-### API Integration Tests
-
-```powershell
-# With port-forward running (localhost:8080)
-pytest tests/test_app.py -v
-
-# Test specific endpoint
-pytest tests/test_app.py::test_predict_endpoint_with_valid_image -v
-```
-
 ---
 
 ## Load Testing
