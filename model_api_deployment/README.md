@@ -44,6 +44,12 @@ By completing this project, you will:
 - **Docker 24.0+** - Containerization platform
 - **Cloud Platform** - AWS EC2, GCP Compute Engine, or Azure VM
 
+### Recommended Tools
+- **VS Code** with Python extension for development
+- **Postman or cURL** for API testing
+- **Git/GitHub** for version control
+- **Docker Desktop** for local container testing
+
 ---
 
 ## Project Requirements
