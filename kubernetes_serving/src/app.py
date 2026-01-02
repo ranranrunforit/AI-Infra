@@ -16,7 +16,7 @@ Learning Objectives:
 """
 
 from flask import Flask, request, jsonify, Response
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+# from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 import os
 import io
 import uuid
@@ -29,10 +29,21 @@ from typing import Dict, Tuple, Optional
 from PIL import Image
 import threading
 
+
 # Import the config instance (not the class)
 from config import config
 # TODO: Import the model loading module you'll create
 from model_loader import ModelLoader
+
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from metrics import (
+    request_count,
+    request_duration,
+    prediction_count,
+    inference_duration,
+    model_loaded_gauge,
+    active_connections
+)
 
 # ============================================================================
 # CONFIGURATION
@@ -95,69 +106,6 @@ def setup_logging() -> logging.Logger:
 
 
 logger = setup_logging()  # TODO: setup_logging()
-
-# ============================================================================
-# PROMETHEUS METRICS
-# ============================================================================
-
-# TODO: Define Prometheus metrics using prometheus_client
-# These metrics will be scraped by Prometheus every 30 seconds
-
-# Counter: Monotonically increasing value (requests, errors, predictions)
-# Histogram: Distribution of values (latency, inference time)
-# Gauge: Value that can go up or down (model loaded status, active connections)
-
-# TODO: Create request counter
-# Track total requests with labels: method, endpoint, status_code
-request_count = Counter(
-    'model_api_requests_total',
-    'Total number of requests',
-    ['method', 'endpoint', 'status_code']
-)
-
-# TODO: Create request duration histogram
-# Track request latency with labels: method, endpoint
-# Buckets: [0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0] (in seconds)
-request_duration = Histogram(
-    'model_api_request_duration_seconds',
-    'Request duration in seconds',
-    ['method', 'endpoint'],
-    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]
-)
-
-# TODO: Create prediction counter
-# Track total predictions with labels: model_name, status (success/error)
-prediction_count = Counter(
-    'model_api_predictions_total',
-    'Total number of predictions',
-    ['model_name', 'status']
-)
-
-# TODO: Create inference duration histogram
-# Track model inference time with labels: model_name
-# Buckets: [0.01, 0.05, 0.1, 0.2, 0.5, 1.0] (in seconds)
-inference_duration = Histogram(
-    'model_api_inference_duration_seconds',
-    'Model inference duration in seconds',
-    ['model_name'],
-    buckets=[0.01, 0.05, 0.1, 0.2, 0.5, 1.0]
-)
-
-# TODO: Create model loaded gauge
-# Value: 1 if model loaded, 0 if not
-# Labels: model_name, version
-model_loaded_gauge = Gauge(
-    'model_api_model_loaded',
-    'Whether model is loaded (1=loaded, 0=not loaded)',
-    ['model_name', 'version']
-)
-
-# TODO: Create active connections gauge
-# Track current number of active requests
-active_connections = Gauge(
-    'model_api_active_connections',
-    'Number of active connections'
-)
 
 # ============================================================================
 # APPLICATION STATE
