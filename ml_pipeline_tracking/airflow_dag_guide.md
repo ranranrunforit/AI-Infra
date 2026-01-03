@@ -10,24 +10,6 @@ Ingest Data → Validate → Preprocess → Version (DVC) → Train → Evaluate
 
 Each step runs automatically, with error handling, retries, and XCom communication between tasks.
 
----
-
-## 📝 Changes I Made to Fix the Code
-
-### Issues Fixed:
-
-1. ✅ **Path configuration** - Changed to `/opt/airflow/src` (correct Airflow path)
-2. ✅ **Missing imports** - Added all required imports in each function
-3. ✅ **XCom handling** - Fixed data passing between tasks
-4. ✅ **Dataset creation** - Added automatic sample dataset creation if source missing
-5. ✅ **DataLoader implementation** - Created SimpleDataset class (was missing)
-6. ✅ **Model loading** - Fixed model architecture recreation for evaluation
-7. ✅ **Class names** - Properly load from label_mapping.json
-8. ✅ **Error handling** - Added try-catch blocks and validation checks
-9. ✅ **MLflow integration** - Fixed experiment lookup and model registration
-10. ✅ **DVC handling** - Made it optional (skips if not initialized)
-11. ✅ **Email notifications** - Disabled by default (removed as it needs SMTP setup)
-12. ✅ **Reduced epochs** - Changed to 3 epochs for faster demo
 
 ---
 
@@ -611,25 +593,3 @@ docker exec -it mlpipeline-airflow-scheduler \
     airflow dags show ml_training_pipeline
 ```
 
----
-
-## 🎓 Summary
-
-You now have a **production-grade automated ML pipeline**! 
-
-The DAG:
-- ✅ Runs automatically on schedule
-- ✅ Tracks all experiments in MLflow
-- ✅ Versions data with DVC
-- ✅ Handles errors with retries
-- ✅ Passes data between tasks via XCom
-- ✅ Registers successful models
-- ✅ Can be monitored in real-time
-
-**Your pipeline is now:**
-1. **Reproducible** - Same input → Same output
-2. **Automated** - No manual steps
-3. **Monitored** - Real-time visibility
-4. **Production-ready** - Error handling, retries, logging
-
-🎉 **Congratulations! You've built a complete MLOps pipeline!**
