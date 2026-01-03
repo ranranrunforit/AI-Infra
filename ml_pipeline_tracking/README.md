@@ -145,19 +145,25 @@ project-03-ml-pipeline-tracking/
 ├── docker-compose.yml                  # Multi-service orchestration
 ├── .env.example                        # Environment configuration
 ├── src/
-│   ├── data_ingestion.py              # Data ingestion module (STUB)
-│   ├── preprocessing.py               # Data preprocessing (STUB)
-│   ├── training.py                    # Model training with MLflow (STUB)
-│   └── evaluation.py                  # Model evaluation (STUB)
+│   ├── data_ingestion.py               # Data ingestion module (STUB)
+│   ├── preprocessing.py                # Data preprocessing (STUB)
+│   ├── training.py                     # Model training with MLflow (STUB)
+│   └── evaluation.py                   # Model evaluation (STUB)
 ├── dags/
-│   └── ml_pipeline_dag.py             # Airflow DAG (STUB)
+│   └── ml_pipeline_dag.py              # Airflow DAG (STUB)
 ├── mlflow/
-│   └── MLproject                      # MLflow project configuration
+│   └── MLproject                       # MLflow project configuration
 ├── dvc/
-│   ├── data.dvc                       # DVC data versioning
-│   └── .dvcignore                     # DVC ignore patterns
+│   ├── data.dvc                        # DVC data versioning
+│   └── .dvcignore                      # DVC ignore patterns
 ├── tests/
-│   └── test_pipeline.py               # Pipeline tests (STUB)
+│   └── test_pipeline.py                # Pipeline tests (STUB)
+├── data/
+│   ├── raw/                            # Created automatically or manually
+│   └── processed/                      # Created automatically or manually
+├── models/                             # For saved models
+├── artifacts/                          # For MLflow artifacts
+└── evaluation_plots/                   # For evaluation plot
 └── docs/
     ├── SETUP.md                        # Setup instructions
     ├── MLFLOW_GUIDE.md                 # MLflow usage guide
