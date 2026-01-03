@@ -162,7 +162,7 @@ project-03-ml-pipeline-tracking/
 │   ├── raw/                            # Created automatically or manually
 │   └── processed/                      # Created automatically or manually
 ├── models/                             # For saved models
-├── mlflow/                             # Airflow
+├── airflow/                            # Airflow
 ├── artifacts/                          # For MLflow artifacts
 └── evaluation_plots/                   # For evaluation plot
 └── docs/
