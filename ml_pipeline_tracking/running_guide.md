@@ -534,26 +534,3 @@ sys.path.insert(0, 'src')
 ```
 
 ---
-
-## 🎓 Learning Resources
-
-- **MLflow Docs**: https://mlflow.org/docs/latest/
-- **Airflow Docs**: https://airflow.apache.org/docs/
-- **DVC Docs**: https://dvc.org/doc
-- **PyTorch Docs**: https://pytorch.org/docs/
-
----
-
-## ✅ Checklist
-
-- [ ] All Docker services running
-- [ ] MLflow UI accessible at :5000
-- [ ] Airflow UI accessible at :8080
-- [ ] MinIO Console accessible at :9001
-- [ ] Quick start script runs successfully
-- [ ] Can see experiments in MLflow
-- [ ] DVC initialized and can push/pull data
-- [ ] Understand data flow through pipeline
-- [ ] Ready to create Airflow DAG
-
-**Congratulations! You now have a working ML pipeline! 🎉**
