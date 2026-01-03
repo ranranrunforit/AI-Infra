@@ -1,7 +1,5 @@
 # Architecture: ML Pipeline with Experiment Tracking
 
-**Version:** 1.0
-**Last Updated:** October 18, 2025
 
 ---
 
@@ -1104,7 +1102,3 @@ class MLflowObserver(TrainingObserver):
 - Data lake architecture
 
 ---
-
-**Architecture Version:** 1.0
-**Reviewed By:** AI Infrastructure Curriculum Team
-**Last Updated:** October 18, 2025
