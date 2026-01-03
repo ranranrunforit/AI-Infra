@@ -285,7 +285,7 @@ Before starting this project, ensure you have:
    cd project-02-kubernetes-serving
 
    # Install Python dependencies
-   pip install -r src/requirements.txt
+   pip install -r requirements.txt
 
    # Copy environment template
    cp .env.example .env
