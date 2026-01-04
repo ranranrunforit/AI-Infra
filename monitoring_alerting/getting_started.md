@@ -200,7 +200,7 @@ curl -X POST http://localhost:5000/predict \
 curl http://localhost:5000/metrics
 
 
-# Verify Everything Works on Windows PowerShell
+# Verify on Windows PowerShell
 
 # Health check
 Invoke-RestMethod http://localhost:5000/health
@@ -210,9 +210,6 @@ Invoke-RestMethod -Uri "http://localhost:5000/predict" -Method POST -ContentType
 
 # Metrics
 Invoke-RestMethod http://localhost:5000/metrics
-
-#Quick One-Liner for PowerShell
-1..50 | ForEach-Object { Invoke-RestMethod -Uri "http://localhost:5000/predict" -Method POST -ContentType "application/json" -Body (@{features=@{feature1=$_;feature2=$_*2;feature3=$_*3}}|ConvertTo-Json); Start-Sleep -Milliseconds 100 }
 
 # Check metrics
 Invoke-RestMethod http://localhost:5000/metrics | Select-String "predictions_total"
@@ -232,6 +229,10 @@ for i in {1..50}; do
     -d "{\"features\": {\"feature1\": $i, \"feature2\": $((i*2)), \"feature3\": $((i*3))}}"
   sleep 0.1
 done
+
+
+#Quick One-Liner for PowerShell
+1..50 | ForEach-Object { Invoke-RestMethod -Uri "http://localhost:5000/predict" -Method POST -ContentType "application/json" -Body (@{features=@{feature1=$_;feature2=$_*2;feature3=$_*3}}|ConvertTo-Json); Start-Sleep -Milliseconds 100 }
 ```
 
 ### View Metrics in Prometheus
