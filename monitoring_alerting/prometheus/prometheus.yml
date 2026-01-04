@@ -129,14 +129,14 @@ scrape_configs:
   # TODO: Add configuration for multiple API instances
   # In production, you'll have multiple replicas for high availability
   #
-  - job_name: 'ml-api-replicas'
-    static_configs:
-      - targets:
-          - 'ml-api-1:5000'
-          - 'ml-api-2:5000'
-          - 'ml-api-3:5000'
-        labels:
-          service: 'model-inference'
+  # - job_name: 'ml-api-replicas'
+  #   static_configs:
+  #     - targets:
+  #         - 'ml-api-1:5000'
+  #         - 'ml-api-2:5000'
+  #         - 'ml-api-3:5000'
+  #       labels:
+  #         service: 'model-inference'
 
 
   # ---------------------------------------------------------------------------
