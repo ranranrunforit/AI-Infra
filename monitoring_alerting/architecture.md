@@ -1,9 +1,5 @@
 # Architecture: Monitoring & Alerting System
 
-**Project**: Monitoring & Alerting System
-**Level**: Junior AI Infrastructure Engineer
-**Version**: 1.0
-
 ---
 
 ## Table of Contents
@@ -919,6 +915,3 @@ Benefits:
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: October 2025
-**Author**: AI Infrastructure Curriculum Team
