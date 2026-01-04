@@ -1,0 +1,39 @@
+# Filebeat Configuration
+# Collects logs and ships to Logstash
+
+filebeat.inputs:
+  # Monitor application log files
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/app/*.log
+      - /var/log/app/*.json
+    
+    # Parse JSON logs
+    json.keys_under_root: true
+    json.add_error_key: true
+    
+    # Add metadata
+    fields:
+      service: ml-api
+      environment: development
+    fields_under_root: true
+
+# Output to Logstash
+output.logstash:
+  hosts: ["logstash:5044"]
+  
+  # Load balancing
+  loadbalance: true
+  
+  # Compression
+  compression_level: 3
+
+# Logging
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644

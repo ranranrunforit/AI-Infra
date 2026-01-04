@@ -1,0 +1,85 @@
+# Alertmanager Configuration
+# Routes and notifies about alerts
+
+global:
+  resolve_timeout: 5m
+
+# Route tree for alerts
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+  
+  # How long to wait before sending a notification
+  group_wait: 10s
+  
+  # How long to wait before sending notification about new alerts
+  group_interval: 10s
+  
+  # How long to wait before sending a notification again
+  repeat_interval: 3h
+  
+  # Group alerts by these labels
+  group_by: ['alertname', 'cluster', 'service']
+  
+  # Child routes
+  routes:
+    # Critical alerts
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      continue: true
+    
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      continue: false
+    
+    # Infrastructure alerts
+    - match:
+        component: infrastructure
+      receiver: 'infrastructure-team'
+      continue: false
+
+# Receivers (notification channels)
+receivers:
+  # Default receiver (logs to console)
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://localhost:9093/api/v1/alerts'
+        send_resolved: true
+
+  # Critical alerts (would go to PagerDuty in production)
+  - name: 'critical-alerts'
+    # For now, just webhook. In production, add:
+    # pagerduty_configs:
+    #   - service_key: YOUR_PAGERDUTY_KEY
+    webhook_configs:
+      - url: 'http://localhost:9093/api/v1/alerts'
+        send_resolved: true
+
+  # Warning alerts (would go to Slack in production)
+  - name: 'warning-alerts'
+    # For now, just webhook. In production, add:
+    # slack_configs:
+    #   - api_url: YOUR_SLACK_WEBHOOK_URL
+    #     channel: '#alerts-warning'
+    webhook_configs:
+      - url: 'http://localhost:9093/api/v1/alerts'
+        send_resolved: true
+
+  # Infrastructure team alerts
+  - name: 'infrastructure-team'
+    webhook_configs:
+      - url: 'http://localhost:9093/api/v1/alerts'
+        send_resolved: true
+
+# Inhibition rules (suppress alerts when others are firing)
+inhibit_rules:
+  # If service is down, don't alert on high latency
+  - source_match:
+      severity: 'critical'
+      alertname: 'ServiceDown'
+    target_match:
+      severity: 'warning'
+    equal: ['instance']
