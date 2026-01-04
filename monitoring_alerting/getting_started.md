@@ -164,6 +164,7 @@ curl http://localhost:5000/health
 # Elasticsearch
 curl http://localhost:9200/_cluster/health
 # Should return: {"status":"green",...}
+
 ```
 
 ### 3. Check Prometheus Targets
@@ -197,6 +198,24 @@ curl -X POST http://localhost:5000/predict \
 
 # Check metrics
 curl http://localhost:5000/metrics
+
+
+# Verify Everything Works on Windows PowerShell
+
+# Health check
+Invoke-RestMethod http://localhost:5000/health
+
+# Prediction
+Invoke-RestMethod -Uri "http://localhost:5000/predict" -Method POST -ContentType "application/json" -Body '{"features":{"feature1":1.0,"feature2":2.0,"feature3":3.0}}'
+
+# Metrics
+Invoke-RestMethod http://localhost:5000/metrics
+
+#Quick One-Liner for PowerShell
+1..50 | ForEach-Object { Invoke-RestMethod -Uri "http://localhost:5000/predict" -Method POST -ContentType "application/json" -Body (@{features=@{feature1=$_;feature2=$_*2;feature3=$_*3}}|ConvertTo-Json); Start-Sleep -Milliseconds 100 }
+
+# Check metrics
+Invoke-RestMethod http://localhost:5000/metrics | Select-String "predictions_total"
 ```
 
 ---
