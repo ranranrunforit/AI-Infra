@@ -147,12 +147,12 @@ scrape_configs:
   # Automatically discovers pods and services in Kubernetes cluster
   # Only if deploying to Kubernetes!
   #
-  - job_name: 'kubernetes-pods'
-    kubernetes_sd_configs:
-      - role: pod
-        namespaces:
-          names:
-            - ml-inference
+  # - job_name: 'kubernetes-pods'
+  #   kubernetes_sd_configs:
+  #     - role: pod
+  #       namespaces:
+  #         names:
+  #           - ml-inference
   #
   #   # Only scrape pods with prometheus.io/scrape: "true" annotation
   #   relabel_configs:
