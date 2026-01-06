@@ -106,6 +106,24 @@ curl http://localhost:5000/metrics
 
 # Expected output:
 # {"status":"healthy",...}
+
+# Test info endpoint
+curl.exe -H "X-API-Key: test-key" http://localhost:5000/info
+
+# Test prediction
+curl.exe -X POST -H "X-API-Key: test-key" -F "file=@cat.jpg" http://localhost:5000/predict
+
+# Pretty print JSON (pipe to Python)
+curl.exe -H "X-API-Key: test-key" http://localhost:5000/info | python -m json.tool
+
+# Test health
+Invoke-RestMethod http://localhost:5000/health
+
+# Test info with API key
+Invoke-RestMethod -Uri "http://localhost:5000/info" -Headers @{"X-API-Key"="test-key"}
+
+# Test prediction with image
+Invoke-RestMethod -Uri "http://localhost:5000/predict" -Method Post -Headers @{"X-API-Key"="test-key"} -Form @{file=Get-Item "cat.jpg"}
 ```
 
 **✅ Checkpoint:** Your API is running locally!
