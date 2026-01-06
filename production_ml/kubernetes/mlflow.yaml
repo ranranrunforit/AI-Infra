@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-server
+  namespace: ml-system-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow-server
+  template:
+    metadata:
+      labels:
+        app: mlflow-server
+    spec:
+      containers:
+      - name: mlflow-server
+        image: ghcr.io/mlflow/mlflow:v2.9.2
+        ports:
+        - containerPort: 5001
+        command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5001"]
+        # Use a temporary empty directory for storage in dev
+        volumeMounts:
+        - name: mlflow-data
+          mountPath: /mlflow
+      volumes:
+      - name: mlflow-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-server  # This name MUST match your API's environment variable
+  namespace: ml-system-dev
+spec:
+  selector:
+    app: mlflow-server
+  ports:
+  - protocol: TCP
+    port: 5001        # The port your API tries to reach
+    targetPort: 5001
