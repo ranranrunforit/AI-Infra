@@ -93,6 +93,21 @@ gunicorn --bind 0.0.0.0:5000 --workers 2 src.main:app
 
 # Test the API
 curl http://localhost:5000/health
+
+# Download test image
+curl.exe -o cat.jpg https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/240px-Cat03.jpg
+
+# Test health
+curl.exe http://localhost:5000/health
+
+# Test info
+curl.exe -H "X-API-Key: test-key" http://localhost:5000/info
+
+# Test prediction
+curl.exe -X POST -H "X-API-Key: test-key" -F "file=@cat.jpg" http://localhost:5000/predict
+
+# View metrics
+curl.exe http://localhost:5000/metrics
 ```
 
 ### Step 4: Test with Docker
