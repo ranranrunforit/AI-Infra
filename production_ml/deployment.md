@@ -493,28 +493,4 @@ kubectl describe certificate <cert-name> -n <namespace>
 kubectl logs -n cert-manager deploy/cert-manager -f
 ```
 
----
 
-## Next Steps
-
-1. **Set up monitoring alerts** - Configure Alertmanager
-2. **Implement autoscaling** - HPA and cluster autoscaler
-3. **Add logging** - ELK or Loki stack
-4. **Implement GitOps** - ArgoCD or Flux
-5. **Set up disaster recovery** - Backup and restore procedures
-6. **Performance tuning** - Load testing and optimization
-7. **Security hardening** - Network policies, RBAC, secrets management
-
----
-
-## Support
-
-For issues or questions:
-- Check logs: `kubectl logs <pod-name>`
-- Review events: `kubectl get events`
-- Consult documentation in `docs/` directory
-- Search GitHub issues and discussions
-
----
-
-**Congratulations!** Your production ML system is now deployed and running! 🎉
