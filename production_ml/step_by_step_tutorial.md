@@ -124,6 +124,21 @@ Invoke-RestMethod -Uri "http://localhost:5000/info" -Headers @{"X-API-Key"="test
 
 # Test prediction with image
 Invoke-RestMethod -Uri "http://localhost:5000/predict" -Method Post -Headers @{"X-API-Key"="test-key"} -Form @{file=Get-Item "cat.jpg"}
+
+# Download test image
+curl.exe -o cat.jpg https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/240px-Cat03.jpg
+
+# Test health
+curl.exe http://localhost:5000/health
+
+# Test info
+curl.exe -H "X-API-Key: test-key" http://localhost:5000/info
+
+# Test prediction
+curl.exe -X POST -H "X-API-Key: test-key" -F "file=@cat.jpg" http://localhost:5000/predict
+
+# View metrics
+curl.exe http://localhost:5000/metrics
 ```
 
 **✅ Checkpoint:** Your API is running locally!
