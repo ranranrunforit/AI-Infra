@@ -1,4 +1,4 @@
-# Project 06: Basic Model Serving System
+# Project 06: Model Serving System
 
 A production-ready machine learning model serving system that deploys a pretrained ResNet50 image classification model as a REST API. This solution demonstrates essential AI infrastructure engineering skills including API development, containerization, orchestration, monitoring, and CI/CD.
 
