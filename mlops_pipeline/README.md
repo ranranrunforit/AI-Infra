@@ -145,16 +145,6 @@ This project is currently a stub. Your task is to implement the complete MLOps p
 # - Rollback on failure
 ```
 
-## Success Criteria
-
-- [ ] Complete pipeline executes successfully end-to-end
-- [ ] 5+ experiments tracked in MLflow with metrics
-- [ ] Data versioned with DVC and retrievable
-- [ ] Model deployed automatically when promoted to Production
-- [ ] Pipeline execution time <30 minutes for sample dataset
-- [ ] All tests passing with 75%+ coverage
-- [ ] Documentation allowing reproduction of pipeline
-
 ## Architecture Diagram
 
 ```
