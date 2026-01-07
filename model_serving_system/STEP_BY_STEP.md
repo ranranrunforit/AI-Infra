@@ -12,8 +12,6 @@ We'll build a production-ready ML serving system in 6 phases:
 5. CI/CD Pipeline
 6. Documentation
 
-**Time estimate:** 20-30 hours
-
 ## Phase 1: Core Application (6-8 hours)
 
 ### Step 1.1: Project Setup
