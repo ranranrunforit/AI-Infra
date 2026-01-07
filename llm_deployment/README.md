@@ -1,4 +1,4 @@
-# Project 03: LLM Deployment Platform
+# Project 08: LLM Deployment Platform
 
 ## Overview
 
