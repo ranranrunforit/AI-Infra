@@ -378,24 +378,6 @@ DRIFT_THRESHOLD=0.1
 3. **Adjust Thresholds**: Update `.env` file
 4. **Custom Metrics**: Add to `src/monitoring/metrics_collector.py`
 
-## Troubleshooting
-
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues and solutions.
-
-Quick fixes:
-```bash
-# Reset everything
-make docker-down
-make clean
-make docker-build
-make docker-up
-
-# Check service health
-make check-status
-
-# View logs
-docker-compose logs -f [service-name]
-```
 
 ## Documentation
 
@@ -403,8 +385,7 @@ docker-compose logs -f [service-name]
 - [Pipeline Documentation](docs/PIPELINE.md) - Detailed pipeline workflows
 - [MLflow Guide](docs/MLFLOW.md) - Experiment tracking and registry
 - [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment
-- [DVC Guide](docs/DVC.md) - Data versioning workflow
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues
+
 
 ## Performance
 
