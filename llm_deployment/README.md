@@ -1,4 +1,4 @@
-# Project 03: LLM Deployment Platform
+# Project 08: LLM Deployment Platform
 
 A production-ready LLM deployment platform with RAG support, GPU optimization, comprehensive monitoring, and cost tracking.
 
@@ -343,35 +343,3 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more issues and solut
 - Validate and sanitize all user inputs
 - Rate limiting enabled by default
 - Regular security updates
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Run linting and tests
-6. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Support
-
-For issues and questions:
-- GitHub Issues: [Create an issue]
-- Documentation: See `/docs`
-- Email: ai-infra-curriculum@joshua-ferguson.com
-
-## Acknowledgments
-
-- vLLM for high-performance LLM serving
-- Hugging Face for model hosting
-- ChromaDB for vector storage
-- FastAPI for the web framework
-
----
-
-**Part of the AI Infrastructure Engineer curriculum**
-**Visit**: https://github.com/ai-infra-curriculum
