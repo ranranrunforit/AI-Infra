@@ -1,4 +1,4 @@
-# Project 01: Basic Model Serving System - Complete Solution
+# Project 06: Basic Model Serving System
 
 A production-ready machine learning model serving system that deploys a pretrained ResNet50 image classification model as a REST API. This solution demonstrates essential AI infrastructure engineering skills including API development, containerization, orchestration, monitoring, and CI/CD.
 
@@ -543,48 +543,3 @@ The GitHub Actions pipeline includes:
 - [ ] Distributed tracing
 - [ ] Multi-region deployment
 
-## Learning Resources
-
-**Documentation:**
-- [Step-by-Step Guide](STEP_BY_STEP.md) - Detailed implementation walkthrough
-- [Architecture](docs/ARCHITECTURE.md) - System design and decisions
-- [API Documentation](docs/API.md) - Complete API reference
-- [Deployment Guide](docs/DEPLOYMENT.md) - Deployment instructions
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
-
-**External Resources:**
-- [FastAPI Tutorial](https://fastapi.tiangolo.com/tutorial/)
-- [PyTorch Documentation](https://pytorch.org/docs/stable/index.html)
-- [Kubernetes Concepts](https://kubernetes.io/docs/concepts/)
-- [Prometheus Best Practices](https://prometheus.io/docs/practices/naming/)
-
-## Contributing
-
-This is a learning project, but contributions are welcome!
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add/update tests
-5. Submit a pull request
-
-## License
-
-This project is part of the AI Infrastructure Curriculum.
-
-## Contact
-
-- **Project**: AI Infrastructure Career Path Curriculum
-- **Email**: ai-infra-curriculum@joshua-ferguson.com
-- **Organization**: ai-infra-curriculum
-
-## Acknowledgments
-
-- PyTorch team for pretrained models
-- FastAPI for excellent documentation
-- Kubernetes community for best practices
-- Contributors and learners using this project
-
----
-
-**Ready to deploy?** Start with the [Quick Start](#quick-start) section or dive into the [Step-by-Step Guide](STEP_BY_STEP.md)!
