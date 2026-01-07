@@ -1,308 +1,282 @@
 """
-Document Processor for Text Cleaning and Normalization
+Document processing and cleaning
 
-This module processes raw documents before embedding and indexing.
-Processing improves search quality and reduces noise in the vector database.
-
-Learning Objectives:
-- Understand text preprocessing techniques
-- Learn document cleaning strategies
-- Implement text normalization
-- Handle special characters and encoding
-- Optimize text for embedding models
-
-Key Concepts:
-- Text cleaning vs normalization
-- Removing unwanted content
-- Preserving semantic meaning
-- Handling code snippets
-- Language detection
-- Special character handling
-
-Processing Pipeline:
-1. Clean text (remove noise)
-2. Normalize whitespace
-3. Remove duplicates
-4. Filter by language
-5. Extract key information
+Text extraction, cleaning, and normalization
 """
 
-import re
 import logging
-from typing import List, Optional, Dict, Any
-from dataclasses import dataclass
-import unicodedata
+import re
+from typing import List, Optional
+from .loader import Document
 
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# TEXT CLEANING
-# ============================================================================
-
-class TextCleaner:
+class DocumentProcessor:
     """
-    Clean and normalize text content.
-
-    TODO: Implement text cleaning
-    - Remove extra whitespace
-    - Fix encoding issues
-    - Remove special characters
-    - Preserve code blocks
-    - Handle URLs and emails
+    Process and clean documents
     """
 
     def __init__(
         self,
+        remove_extra_whitespace: bool = True,
         remove_urls: bool = False,
         remove_emails: bool = False,
-        preserve_code: bool = True,
-        lowercase: bool = False
+        lowercase: bool = False,
+        min_length: int = 10,
     ):
         """
-        Initialize text cleaner.
+        Initialize document processor
 
         Args:
-            remove_urls: Whether to remove URLs
-            remove_emails: Whether to remove email addresses
-            preserve_code: Preserve code blocks (```...```)
+            remove_extra_whitespace: Remove extra whitespace
+            remove_urls: Remove URLs
+            remove_emails: Remove email addresses
             lowercase: Convert to lowercase
+            min_length: Minimum document length (characters)
         """
-        # TODO: Store configuration
-        # self.remove_urls = remove_urls
-        # self.remove_emails = remove_emails
-        # self.preserve_code = preserve_code
-        # self.lowercase = lowercase
+        self.remove_extra_whitespace = remove_extra_whitespace
+        self.remove_urls = remove_urls
+        self.remove_emails = remove_emails
+        self.lowercase = lowercase
+        self.min_length = min_length
 
-        # TODO: Compile regex patterns for efficiency
-        # self.url_pattern = re.compile(r'https?://\S+|www\.\S+')
-        # self.email_pattern = re.compile(r'\S+@\S+\.\S+')
-        # self.code_block_pattern = re.compile(r'```[\s\S]*?```')
-
-        pass
-
-    def clean(self, text: str) -> str:
+    def process(self, document: Document) -> Optional[Document]:
         """
-        Clean text content.
-
-        TODO: Implement text cleaning pipeline
-        - Extract and preserve code blocks
-        - Remove URLs if configured
-        - Remove emails if configured
-        - Normalize whitespace
-        - Remove control characters
-        - Restore code blocks
-        - Optionally lowercase
+        Process a single document
 
         Args:
-            text: Raw text to clean
+            document: Document to process
+
+        Returns:
+            Processed document or None if filtered out
+        """
+        text = document.text
+
+        # Clean text
+        text = self.clean_text(text)
+
+        # Check minimum length
+        if len(text) < self.min_length:
+            logger.debug(
+                f"Document {document.doc_id} too short ({len(text)} chars), skipping"
+            )
+            return None
+
+        # Update document
+        document.text = text
+        document.metadata["processed"] = True
+        document.metadata["original_length"] = len(document.text)
+        document.metadata["processed_length"] = len(text)
+
+        return document
+
+    def process_batch(self, documents: List[Document]) -> List[Document]:
+        """
+        Process multiple documents
+
+        Args:
+            documents: List of documents
+
+        Returns:
+            List of processed documents (filtered)
+        """
+        processed = []
+
+        for doc in documents:
+            processed_doc = self.process(doc)
+            if processed_doc is not None:
+                processed.append(processed_doc)
+
+        logger.info(
+            f"Processed {len(processed)}/{len(documents)} documents "
+            f"({len(documents) - len(processed)} filtered out)"
+        )
+
+        return processed
+
+    def clean_text(self, text: str) -> str:
+        """
+        Clean text
+
+        Args:
+            text: Text to clean
 
         Returns:
             Cleaned text
         """
-        # TODO: Handle empty input
-        # if not text:
-        #     return ""
+        # Remove URLs
+        if self.remove_urls:
+            text = re.sub(
+                r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+',
+                '',
+                text,
+            )
 
-        # TODO: Preserve code blocks
-        # code_blocks = []
-        # if self.preserve_code:
-        #     code_blocks = self.code_block_pattern.findall(text)
-        #     text = self.code_block_pattern.sub("__CODE_BLOCK__", text)
+        # Remove emails
+        if self.remove_emails:
+            text = re.sub(r'\S+@\S+', '', text)
 
-        # TODO: Remove URLs
-        # if self.remove_urls:
-        #     text = self.url_pattern.sub("", text)
+        # Remove extra whitespace
+        if self.remove_extra_whitespace:
+            # Replace multiple spaces with single space
+            text = re.sub(r' +', ' ', text)
+            # Replace multiple newlines with double newline
+            text = re.sub(r'\n\n+', '\n\n', text)
+            # Remove leading/trailing whitespace
+            text = text.strip()
 
-        # TODO: Remove emails
-        # if self.remove_emails:
-        #     text = self.email_pattern.sub("", text)
+        # Convert to lowercase
+        if self.lowercase:
+            text = text.lower()
 
-        # TODO: Normalize Unicode
-        # text = unicodedata.normalize('NFKC', text)
+        return text
 
-        # TODO: Remove control characters
-        # text = self._remove_control_characters(text)
-
-        # TODO: Normalize whitespace
-        # text = self._normalize_whitespace(text)
-
-        # TODO: Restore code blocks
-        # for code_block in code_blocks:
-        #     text = text.replace("__CODE_BLOCK__", code_block, 1)
-
-        # TODO: Lowercase if configured
-        # if self.lowercase:
-        #     text = text.lower()
-
-        # return text
-
-        pass
-
-    def _remove_control_characters(self, text: str) -> str:
+    def extract_metadata(self, document: Document) -> dict:
         """
-        Remove control characters.
-
-        TODO: Implement control character removal
-        - Keep newlines and tabs
-        - Remove other control characters
-        - Preserve Unicode characters
+        Extract additional metadata from document
 
         Args:
-            text: Input text
+            document: Document to analyze
 
         Returns:
-            Text without control characters
+            Extracted metadata
         """
-        # TODO: Remove control characters except \n and \t
-        # return "".join(
-        #     ch for ch in text
-        #     if ch in ['\n', '\t'] or not unicodedata.category(ch).startswith('C')
-        # )
+        text = document.text
 
-        pass
+        metadata = {
+            "char_count": len(text),
+            "word_count": len(text.split()),
+            "line_count": len(text.split("\n")),
+        }
 
-    def _normalize_whitespace(self, text: str) -> str:
-        """
-        Normalize whitespace.
+        # Count sentences (rough approximation)
+        sentence_endings = re.findall(r'[.!?]+', text)
+        metadata["sentence_count"] = len(sentence_endings)
 
-        TODO: Implement whitespace normalization
-        - Replace multiple spaces with single space
-        - Replace multiple newlines with max 2
-        - Strip leading/trailing whitespace
-        - Preserve paragraph breaks
+        # Detect language (very basic)
+        # Count common English words
+        common_words = ["the", "a", "an", "and", "or", "but", "in", "on", "at"]
+        word_list = text.lower().split()
+        english_word_count = sum(1 for word in word_list if word in common_words)
+        if len(word_list) > 0:
+            english_ratio = english_word_count / len(word_list)
+            metadata["likely_english"] = english_ratio > 0.05
 
-        Args:
-            text: Input text
-
-        Returns:
-            Text with normalized whitespace
-        """
-        # TODO: Replace multiple spaces
-        # text = re.sub(r' +', ' ', text)
-
-        # TODO: Limit consecutive newlines to 2
-        # text = re.sub(r'\n\n+', '\n\n', text)
-
-        # TODO: Strip whitespace from each line
-        # lines = [line.strip() for line in text.split('\n')]
-        # text = '\n'.join(lines)
-
-        # TODO: Strip overall
-        # return text.strip()
-
-        pass
+        return metadata
 
 
-# ============================================================================
-# DOCUMENT FILTERING
-# ============================================================================
-
-class DocumentFilter:
+class TextNormalizer:
     """
-    Filter documents based on quality criteria.
-
-    TODO: Implement document filtering
-    - Filter by language
-    - Filter by length
-    - Filter by content quality
-    - Remove duplicates
-    - Filter by metadata
+    Normalize text for better retrieval
     """
 
     def __init__(
         self,
-        min_length: int = 100,
-        max_length: int = 100000,
-        languages: Optional[List[str]] = None
+        expand_contractions: bool = True,
+        remove_accents: bool = False,
+        normalize_unicode: bool = True,
     ):
         """
-        Initialize document filter.
+        Initialize text normalizer
 
         Args:
-            min_length: Minimum character count
-            max_length: Maximum character count
-            languages: Allowed languages (None = all)
+            expand_contractions: Expand contractions (don't -> do not)
+            remove_accents: Remove accents from characters
+            normalize_unicode: Normalize unicode characters
         """
-        # TODO: Store configuration
-        # self.min_length = min_length
-        # self.max_length = max_length
-        # self.languages = languages or ["en"]
+        self.expand_contractions = expand_contractions
+        self.remove_accents = remove_accents
+        self.normalize_unicode = normalize_unicode
 
-        pass
+        # Contraction map
+        self.contractions = {
+            "don't": "do not",
+            "doesn't": "does not",
+            "didn't": "did not",
+            "can't": "cannot",
+            "won't": "will not",
+            "shouldn't": "should not",
+            "wouldn't": "would not",
+            "couldn't": "could not",
+            "isn't": "is not",
+            "aren't": "are not",
+            "wasn't": "was not",
+            "weren't": "were not",
+            "haven't": "have not",
+            "hasn't": "has not",
+            "hadn't": "had not",
+            "it's": "it is",
+            "that's": "that is",
+            "what's": "what is",
+            "there's": "there is",
+            "i'm": "i am",
+            "you're": "you are",
+            "we're": "we are",
+            "they're": "they are",
+            "i've": "i have",
+            "you've": "you have",
+            "we've": "we have",
+            "they've": "they have",
+            "i'll": "i will",
+            "you'll": "you will",
+            "we'll": "we will",
+            "they'll": "they will",
+        }
 
-    def filter(self, documents: List[Any]) -> List[Any]:
+    def normalize(self, text: str) -> str:
         """
-        Filter documents.
-
-        TODO: Implement filtering pipeline
-        - Filter by length
-        - Filter by language
-        - Remove duplicates
-        - Filter low-quality content
+        Normalize text
 
         Args:
-            documents: List of Document objects
+            text: Text to normalize
 
         Returns:
-            Filtered list of documents
+            Normalized text
         """
-        # TODO: Filter by length
-        # docs = [
-        #     doc for doc in documents
-        #     if self.min_length <= len(doc.content) <= self.max_length
-        # ]
+        # Normalize unicode
+        if self.normalize_unicode:
+            import unicodedata
 
-        # TODO: Filter by language
-        # if self.languages:
-        #     docs = [
-        #         doc for doc in docs
-        #         if self._detect_language(doc.content) in self.languages
-        #     ]
+            text = unicodedata.normalize("NFKC", text)
 
-        # TODO: Remove duplicates
-        # docs = self._remove_duplicates(docs)
+        # Remove accents
+        if self.remove_accents:
+            import unicodedata
 
-        # TODO: Filter low quality
-        # docs = [doc for doc in docs if self._is_quality_content(doc.content)]
+            text = "".join(
+                c
+                for c in unicodedata.normalize("NFD", text)
+                if unicodedata.category(c) != "Mn"
+            )
 
-        # return docs
+        # Expand contractions
+        if self.expand_contractions:
+            for contraction, expansion in self.contractions.items():
+                # Case insensitive replacement
+                pattern = re.compile(re.escape(contraction), re.IGNORECASE)
+                text = pattern.sub(expansion, text)
 
-        pass
+        return text
 
-    def _detect_language(self, text: str) -> str:
+
+class DocumentDeduplicator:
+    """
+    Remove duplicate documents
+    """
+
+    def __init__(self, similarity_threshold: float = 0.95):
         """
-        Detect text language.
-
-        TODO: Implement language detection
-        - Use langdetect or similar library
-        - Return ISO language code
-        - Handle detection errors
+        Initialize deduplicator
 
         Args:
-            text: Text to analyze
-
-        Returns:
-            ISO language code (e.g., "en", "es")
+            similarity_threshold: Threshold for considering documents duplicates
         """
-        # TODO: Detect language
-        # try:
-        #     from langdetect import detect
-        #     return detect(text)
-        # except Exception as e:
-        #     logger.warning(f"Language detection failed: {e}")
-        #     return "unknown"
+        self.similarity_threshold = similarity_threshold
 
-        pass
-
-    def _remove_duplicates(self, documents: List[Any]) -> List[Any]:
+    def deduplicate(self, documents: List[Document]) -> List[Document]:
         """
-        Remove duplicate documents.
-
-        TODO: Implement duplicate removal
-        - Use content hashing
-        - Compare similar documents
-        - Keep first occurrence
+        Remove duplicate documents
 
         Args:
             documents: List of documents
@@ -310,369 +284,72 @@ class DocumentFilter:
         Returns:
             Deduplicated list
         """
-        # TODO: Hash-based deduplication
-        # seen_hashes = set()
-        # unique_docs = []
-        #
-        # for doc in documents:
-        #     content_hash = hash(doc.content)
-        #     if content_hash not in seen_hashes:
-        #         seen_hashes.add(content_hash)
-        #         unique_docs.append(doc)
-        #
-        # return unique_docs
+        if not documents:
+            return []
 
-        pass
+        # Use exact text matching for now (can be improved with fuzzy matching)
+        seen_texts = set()
+        unique_docs = []
 
-    def _is_quality_content(self, text: str) -> bool:
+        for doc in documents:
+            text_normalized = doc.text.strip().lower()
+
+            if text_normalized not in seen_texts:
+                seen_texts.add(text_normalized)
+                unique_docs.append(doc)
+            else:
+                logger.debug(f"Removing duplicate document: {doc.doc_id}")
+
+        logger.info(
+            f"Removed {len(documents) - len(unique_docs)} duplicates "
+            f"({len(unique_docs)} unique documents)"
+        )
+
+        return unique_docs
+
+    def deduplicate_fuzzy(
+        self, documents: List[Document], embedding_model=None
+    ) -> List[Document]:
         """
-        Check if content meets quality criteria.
-
-        TODO: Implement quality checking
-        - Check word count vs character count ratio
-        - Check for meaningful sentences
-        - Detect gibberish or corrupted text
-        - Check punctuation ratio
+        Remove duplicates using fuzzy matching
 
         Args:
-            text: Text to check
+            documents: List of documents
+            embedding_model: Embedding model for similarity
 
         Returns:
-            True if quality content
+            Deduplicated list
         """
-        # TODO: Check word/char ratio
-        # words = text.split()
-        # if len(words) < 10:
-        #     return False
-        #
-        # # Average word length should be reasonable (3-15 chars)
-        # avg_word_len = len(text) / len(words)
-        # if avg_word_len < 3 or avg_word_len > 15:
-        #     return False
+        if not documents or embedding_model is None:
+            return self.deduplicate(documents)
 
-        # TODO: Check for sentences
-        # sentences = re.split(r'[.!?]+', text)
-        # if len(sentences) < 2:
-        #     return False
+        # Generate embeddings
+        texts = [doc.text for doc in documents]
+        embeddings = embedding_model.encode(texts)
 
-        # return True
+        # Find duplicates using cosine similarity
+        unique_indices = [0]  # Always keep first document
 
-        pass
+        for i in range(1, len(documents)):
+            is_duplicate = False
 
+            for j in unique_indices:
+                similarity = embedding_model.similarity(embeddings[i], embeddings[j])
 
-# ============================================================================
-# METADATA ENRICHMENT
-# ============================================================================
+                if similarity >= self.similarity_threshold:
+                    is_duplicate = True
+                    logger.debug(
+                        f"Document {i} is duplicate of {j} (similarity: {similarity:.3f})"
+                    )
+                    break
 
-class MetadataEnricher:
-    """
-    Enrich document metadata.
+            if not is_duplicate:
+                unique_indices.append(i)
 
-    TODO: Implement metadata enrichment
-    - Extract keywords
-    - Calculate readability scores
-    - Detect topics
-    - Add processing timestamps
-    - Add quality metrics
-    """
+        unique_docs = [documents[i] for i in unique_indices]
 
-    def enrich(self, document: Any) -> Any:
-        """
-        Add enriched metadata to document.
+        logger.info(
+            f"Fuzzy deduplication: {len(unique_docs)}/{len(documents)} unique documents"
+        )
 
-        TODO: Implement metadata enrichment
-        - Extract keywords
-        - Calculate statistics
-        - Add processing info
-        - Detect entities (optional)
-
-        Args:
-            document: Document to enrich
-
-        Returns:
-            Document with enriched metadata
-        """
-        # TODO: Calculate text statistics
-        # document.metadata["word_count"] = len(document.content.split())
-        # document.metadata["sentence_count"] = len(re.split(r'[.!?]+', document.content))
-        # document.metadata["char_count"] = len(document.content)
-
-        # TODO: Extract keywords (simple version)
-        # document.metadata["keywords"] = self._extract_keywords(document.content)
-
-        # TODO: Add processing timestamp
-        # from datetime import datetime
-        # document.metadata["processed_at"] = datetime.now().isoformat()
-
-        # TODO: Calculate readability (optional)
-        # document.metadata["readability_score"] = self._calculate_readability(document.content)
-
-        # return document
-
-        pass
-
-    def _extract_keywords(self, text: str, top_n: int = 10) -> List[str]:
-        """
-        Extract keywords from text.
-
-        TODO: Implement keyword extraction
-        - Use TF-IDF or similar
-        - Filter stop words
-        - Return top N keywords
-
-        Args:
-            text: Text to analyze
-            top_n: Number of keywords to extract
-
-        Returns:
-            List of keywords
-        """
-        # TODO: Simple word frequency approach
-        # from collections import Counter
-        #
-        # # Common stop words
-        # stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for"}
-        #
-        # # Tokenize and filter
-        # words = re.findall(r'\b\w+\b', text.lower())
-        # words = [w for w in words if w not in stop_words and len(w) > 3]
-        #
-        # # Get most common
-        # counter = Counter(words)
-        # return [word for word, _ in counter.most_common(top_n)]
-
-        pass
-
-    def _calculate_readability(self, text: str) -> float:
-        """
-        Calculate readability score.
-
-        TODO: Implement Flesch reading ease or similar
-        - Count words, sentences, syllables
-        - Calculate score
-        - Return 0-100 score
-
-        Args:
-            text: Text to analyze
-
-        Returns:
-            Readability score (0-100, higher = easier)
-        """
-        # TODO: Implement Flesch reading ease
-        # Formula: 206.835 - 1.015 * (words/sentences) - 84.6 * (syllables/words)
-
-        pass
-
-
-# ============================================================================
-# DOCUMENT PROCESSOR (MAIN)
-# ============================================================================
-
-class DocumentProcessor:
-    """
-    Main document processing pipeline.
-
-    TODO: Implement complete processing pipeline
-    - Clean text
-    - Filter documents
-    - Enrich metadata
-    - Log processing stats
-    """
-
-    def __init__(
-        self,
-        cleaner: Optional[TextCleaner] = None,
-        filter: Optional[DocumentFilter] = None,
-        enricher: Optional[MetadataEnricher] = None
-    ):
-        """
-        Initialize document processor.
-
-        Args:
-            cleaner: Text cleaner instance
-            filter: Document filter instance
-            enricher: Metadata enricher instance
-        """
-        # TODO: Initialize components
-        # self.cleaner = cleaner or TextCleaner()
-        # self.filter = filter or DocumentFilter()
-        # self.enricher = enricher or MetadataEnricher()
-
-        pass
-
-    def process(self, documents: List[Any]) -> List[Any]:
-        """
-        Process documents through pipeline.
-
-        TODO: Implement processing pipeline
-        - Clean each document
-        - Filter documents
-        - Enrich metadata
-        - Log statistics
-
-        Args:
-            documents: List of raw documents
-
-        Returns:
-            List of processed documents
-        """
-        # TODO: Log initial count
-        # logger.info(f"Processing {len(documents)} documents")
-
-        # TODO: Clean documents
-        # for doc in documents:
-        #     doc.content = self.cleaner.clean(doc.content)
-
-        # TODO: Filter documents
-        # documents = self.filter.filter(documents)
-        # logger.info(f"After filtering: {len(documents)} documents")
-
-        # TODO: Enrich metadata
-        # for doc in documents:
-        #     doc = self.enricher.enrich(doc)
-
-        # TODO: Log final stats
-        # total_chars = sum(len(doc.content) for doc in documents)
-        # logger.info(f"Processed {len(documents)} documents, {total_chars} total characters")
-
-        # return documents
-
-        pass
-
-    def process_single(self, document: Any) -> Optional[Any]:
-        """
-        Process a single document.
-
-        TODO: Implement single document processing
-        - Clean content
-        - Check if passes filter
-        - Enrich metadata
-        - Return processed document or None
-
-        Args:
-            document: Single document
-
-        Returns:
-            Processed document or None if filtered out
-        """
-        # TODO: Clean
-        # document.content = self.cleaner.clean(document.content)
-
-        # TODO: Filter
-        # if not self.filter._is_quality_content(document.content):
-        #     return None
-        # if not (self.filter.min_length <= len(document.content) <= self.filter.max_length):
-        #     return None
-
-        # TODO: Enrich
-        # document = self.enricher.enrich(document)
-
-        # return document
-
-        pass
-
-
-# ============================================================================
-# UTILITIES
-# ============================================================================
-
-def remove_html_tags(text: str) -> str:
-    """
-    Remove HTML tags from text.
-
-    TODO: Implement HTML tag removal
-    - Use regex or parser
-    - Preserve text content
-    - Handle nested tags
-
-    Args:
-        text: Text with HTML
-
-    Returns:
-        Text without HTML tags
-    """
-    # TODO: Remove HTML tags
-    # import re
-    # return re.sub(r'<[^>]+>', '', text)
-
-    pass
-
-
-def extract_code_blocks(text: str) -> List[str]:
-    """
-    Extract code blocks from markdown.
-
-    TODO: Implement code block extraction
-    - Find ```...``` blocks
-    - Preserve code content
-    - Return list of code blocks
-
-    Args:
-        text: Markdown text
-
-    Returns:
-        List of code blocks
-    """
-    # TODO: Extract code blocks
-    # import re
-    # return re.findall(r'```[\s\S]*?```', text)
-
-    pass
-
-
-# ============================================================================
-# EXAMPLE USAGE
-# ============================================================================
-
-"""
-Example Usage:
-
-from .loader import TextLoader, Document
-
-# Load documents
-loader = TextLoader()
-doc = loader.load("document.txt")
-
-# Process single document
-processor = DocumentProcessor(
-    cleaner=TextCleaner(remove_urls=True, lowercase=False),
-    filter=DocumentFilter(min_length=100, languages=["en"]),
-    enricher=MetadataEnricher()
-)
-
-processed_doc = processor.process_single(doc)
-print(f"Processed: {processed_doc.metadata}")
-
-# Process multiple documents
-documents = [doc1, doc2, doc3]
-processed_docs = processor.process(documents)
-print(f"Processed {len(processed_docs)} documents")
-
-# Custom cleaning
-cleaner = TextCleaner(
-    remove_urls=True,
-    remove_emails=True,
-    preserve_code=True,
-    lowercase=False
-)
-
-cleaned_text = cleaner.clean(raw_text)
-print(f"Original: {len(raw_text)} chars")
-print(f"Cleaned: {len(cleaned_text)} chars")
-
-# Filtering
-filter = DocumentFilter(
-    min_length=500,
-    max_length=50000,
-    languages=["en"]
-)
-
-filtered_docs = filter.filter(all_documents)
-print(f"Kept {len(filtered_docs)} of {len(all_documents)} documents")
-
-# Metadata enrichment
-enricher = MetadataEnricher()
-enriched_doc = enricher.enrich(document)
-print(f"Keywords: {enriched_doc.metadata['keywords']}")
-print(f"Word count: {enriched_doc.metadata['word_count']}")
-"""
+        return unique_docs

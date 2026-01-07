@@ -1,8 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: model-serving
+  name: llm-platform
   labels:
-    name: model-serving
+    name: llm-platform
     environment: production
-    project: basic-model-serving

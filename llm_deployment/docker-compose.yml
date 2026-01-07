@@ -1,53 +1,91 @@
 version: '3.8'
 
 services:
-  # Model serving API
-  api:
+  # LLM API Service
+  llm-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: model-serving-api
+      target: application
+    container_name: llm-api
     ports:
       - "8000:8000"
     environment:
-      - MODEL_DEVICE=cpu
+      - MODEL_CONFIG=tiny-llama  # Use tiny-llama for testing, llama2-7b-chat for production
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - VECTOR_DB_BACKEND=chromadb
+      - CHROMA_PERSIST_DIR=/app/chroma_db
+      - RAG_TOP_K=5
+      - RAG_CHUNK_SIZE=512
+      - RAG_CHUNK_OVERLAP=50
+      - GPU_COST_PER_HOUR=1.0
+      - RATE_LIMIT_RPM=60
       - LOG_LEVEL=INFO
-      - ENABLE_METRICS=true
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - llm-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health').raise_for_status()"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
     restart: unless-stopped
-    networks:
-      - model-serving
 
-  # Prometheus for metrics collection
+  # ChromaDB (vector database)
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    ports:
+      - "8001:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chromadb-data:/chroma/chroma
+    networks:
+      - llm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Prometheus (metrics collection)
   prometheus:
-    image: prom/prometheus:v2.48.0
+    image: prom/prometheus:latest
     container_name: prometheus
     ports:
       - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=7d'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+      - prometheus-data:/prometheus
     networks:
-      - model-serving
-    depends_on:
-      - api
+      - llm-network
+    restart: unless-stopped
 
-  # Grafana for visualization
+  # Grafana (metrics visualization)
   grafana:
-    image: grafana/grafana:10.2.2
+    image: grafana/grafana:latest
     container_name: grafana
     ports:
       - "3000:3000"
@@ -56,19 +94,43 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
       - grafana-data:/var/lib/grafana
-    restart: unless-stopped
     networks:
-      - model-serving
+      - llm-network
     depends_on:
       - prometheus
+    restart: unless-stopped
 
-volumes:
-  prometheus-data:
-  grafana-data:
+  # Redis (optional: for caching)
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - llm-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 networks:
-  model-serving:
+  llm-network:
     driver: bridge
+
+volumes:
+  chromadb-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  redis-data:
+    driver: local

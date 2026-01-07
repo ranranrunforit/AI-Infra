@@ -1,152 +1,104 @@
 #!/bin/bash
+# Setup script for LLM Deployment Platform
 
-# Setup script for local development environment
-# This script sets up the complete development environment
+set -e
 
-set -e  # Exit on error
-
-echo "=========================================="
-echo "Model Serving System - Setup Script"
-echo "=========================================="
+echo "========================================="
+echo "LLM Deployment Platform Setup"
+echo "========================================="
 echo ""
 
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Check Python version
+echo "Checking Python version..."
+python_version=$(python3 --version 2>&1 | awk '{print $2}')
+echo "Python version: $python_version"
 
-# Function to print colored output
-print_status() {
-    echo -e "${GREEN}[✓]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[✗]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[!]${NC} $1"
-}
-
-# Check if Python is installed
-echo "Checking prerequisites..."
-if ! command -v python3 &> /dev/null; then
-    print_error "Python 3 is not installed. Please install Python 3.11 or higher."
+if ! python3 -c 'import sys; assert sys.version_info >= (3, 10)' 2>/dev/null; then
+    echo "Error: Python 3.10 or higher is required"
     exit 1
 fi
 
-PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-print_status "Python version: $PYTHON_VERSION"
-
-# Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    print_warning "Docker is not installed. You'll need it for containerization."
+# Check for GPU
+echo ""
+echo "Checking for GPU..."
+if command -v nvidia-smi &> /dev/null; then
+    echo "NVIDIA GPU detected:"
+    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+    GPU_AVAILABLE=true
 else
-    print_status "Docker is installed"
-fi
-
-# Check if kubectl is installed
-if ! command -v kubectl &> /dev/null; then
-    print_warning "kubectl is not installed. You'll need it for Kubernetes deployment."
-else
-    print_status "kubectl is installed"
+    echo "No NVIDIA GPU detected. CPU-only mode will be used."
+    GPU_AVAILABLE=false
 fi
 
 # Create virtual environment
 echo ""
-echo "Setting up Python virtual environment..."
+echo "Creating virtual environment..."
 if [ ! -d "venv" ]; then
     python3 -m venv venv
-    print_status "Virtual environment created"
+    echo "Virtual environment created"
 else
-    print_warning "Virtual environment already exists"
+    echo "Virtual environment already exists"
 fi
 
 # Activate virtual environment
 echo ""
 echo "Activating virtual environment..."
 source venv/bin/activate
-print_status "Virtual environment activated"
 
 # Upgrade pip
 echo ""
 echo "Upgrading pip..."
-pip install --upgrade pip > /dev/null 2>&1
-print_status "pip upgraded"
+pip install --upgrade pip setuptools wheel
 
 # Install dependencies
 echo ""
-echo "Installing Python dependencies..."
-pip install -r requirements.txt > /dev/null 2>&1
-print_status "Production dependencies installed"
+echo "Installing dependencies..."
+pip install -r requirements.txt
 
+# Create directories
 echo ""
-echo "Installing development dependencies..."
-pip install -r requirements-dev.txt > /dev/null 2>&1
-print_status "Development dependencies installed"
+echo "Creating directories..."
+mkdir -p chroma_db models logs data/sample-docs
 
-# Create .env file if it doesn't exist
+# Copy environment file
 echo ""
 if [ ! -f ".env" ]; then
-    echo "Creating .env file from template..."
-    if [ -f ".env.example" ]; then
-        cp .env.example .env
-        print_status ".env file created"
-    else
-        print_warning ".env.example not found, creating basic .env file"
-        cat > .env << EOF
-# Application settings
-APP_NAME=model-serving-api
-APP_VERSION=1.0.0
-DEBUG=false
-LOG_LEVEL=INFO
-
-# Model settings
-MODEL_NAME=resnet50
-MODEL_DEVICE=cpu
-
-# API settings
-API_HOST=0.0.0.0
-API_PORT=8000
-EOF
-        print_status ".env file created"
-    fi
+    echo "Creating .env file..."
+    cp .env.example .env
+    echo ".env file created. Please edit it with your configuration."
 else
-    print_warning ".env file already exists"
+    echo ".env file already exists"
 fi
 
-# Create necessary directories
+# Download model (optional)
 echo ""
-echo "Creating necessary directories..."
-mkdir -p logs
-mkdir -p data
-print_status "Directories created"
-
-# Run tests to verify installation
-echo ""
-echo "Running tests to verify installation..."
-if pytest tests/ -q --tb=short > /dev/null 2>&1; then
-    print_status "All tests passed!"
-else
-    print_warning "Some tests failed. This might be expected if model needs to download."
+read -p "Download TinyLlama model for testing? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Downloading TinyLlama model..."
+    python3 -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('TinyLlama/TinyLlama-1.1B-Chat-v1.0'); AutoModelForCausalLM.from_pretrained('TinyLlama/TinyLlama-1.1B-Chat-v1.0')"
+    echo "Model downloaded"
 fi
 
-# Print summary
+# Test installation
 echo ""
-echo "=========================================="
-echo "Setup Complete!"
-echo "=========================================="
+echo "Testing installation..."
+python3 -c "import torch; import transformers; import sentence_transformers; import fastapi; print('✓ All packages imported successfully')"
+
+echo ""
+echo "========================================="
+echo "Setup complete!"
+echo "========================================="
 echo ""
 echo "Next steps:"
-echo "  1. Activate virtual environment: source venv/bin/activate"
-echo "  2. Review and update .env file if needed"
-echo "  3. Run the application: python -m uvicorn src.api:app --reload"
-echo "  4. Access API docs at: http://localhost:8000/docs"
+echo "1. Activate the virtual environment: source venv/bin/activate"
+echo "2. Edit .env file with your configuration"
+echo "3. Run the API: make run"
+echo "   Or: python -m uvicorn src.api.main:app --reload"
 echo ""
 echo "For Docker deployment:"
-echo "  docker-compose up --build"
+echo "  make docker-up"
 echo ""
 echo "For Kubernetes deployment:"
-echo "  ./scripts/deploy.sh"
+echo "  make k8s-deploy"
 echo ""

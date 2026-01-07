@@ -1,546 +1,425 @@
 """
-FastAPI Main Application for LLM Deployment Platform
+FastAPI application for LLM serving
 
-This module implements the RESTful API for:
-- LLM text generation (completion and chat)
-- RAG-enabled generation
-- Streaming responses
+Provides endpoints for:
+- Direct LLM generation
+- RAG-augmented generation
+- Document ingestion
 - Health checks and metrics
-- API key authentication
-
-Learning Objectives:
-1. Build production-ready FastAPI applications
-2. Implement async request handling
-3. Handle Server-Sent Events for streaming
-4. Integrate authentication and rate limiting
-5. Structure scalable API services
-
-References:
-- FastAPI Documentation: https://fastapi.tiangolo.com/
-- OpenAI API Specification: https://platform.openai.com/docs/api-reference
 """
 
 import logging
-import time
+import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from fastapi.security import APIKeyHeader
-from prometheus_client import make_asgi_app
+import uvicorn
 
+from ..llm import LLMServer, GenerationRequest as LLMGenerationRequest, ModelConfig
+from ..rag import (
+    RAGPipeline,
+    RAGConfig,
+    EmbeddingModel,
+    ChromaDBRetriever,
+)
+from ..monitoring import get_metrics_collector, RequestTimer, CostTracker, CostConfig
 from .models import (
     GenerateRequest,
     GenerateResponse,
     RAGGenerateRequest,
     RAGGenerateResponse,
-    HealthResponse
+    IngestRequest,
+    IngestResponse,
+    HealthResponse,
+    ModelInfo,
+    CostBreakdown,
+    RetrievedChunk,
 )
-from .streaming import stream_generator
-from ..llm.server import LLMServer, ChatLLMServer
-from ..llm.config import LLMConfig
-from ..rag.pipeline import RAGPipeline, RAGConfig
-from ..monitoring.metrics import metrics_manager
+from .middleware import add_middlewares
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
+# Global instances
+llm_server: Optional[LLMServer] = None
+rag_pipeline: Optional[RAGPipeline] = None
+metrics_collector = None
+cost_tracker = None
 
-# ============================================================================
-# Application Lifecycle
-# ============================================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager.
-
-    Handles startup and shutdown operations:
-    - Model loading
-    - Database connections
-    - Resource cleanup
-
-    TODO: Implement lifespan management:
-    1. Startup:
-       - Load LLM model
-       - Initialize RAG components
-       - Connect to vector DB and cache
-       - Start metrics exporter
-       - Log startup info
-    2. Shutdown:
-       - Gracefully stop LLM server
-       - Close database connections
-       - Flush metrics
-       - Cleanup resources
-    """
+    """Startup and shutdown events"""
     # Startup
-    logger.info("Starting LLM Deployment Platform...")
+    global llm_server, rag_pipeline, metrics_collector, cost_tracker
 
-    # TODO: Initialize LLM server
-    # llm_config = LLMConfig()
-    # llm_server = ChatLLMServer(llm_config)
-    # await llm_server.initialize()
-    # app.state.llm = llm_server
+    logger.info("Starting LLM deployment platform...")
 
-    # TODO: Initialize RAG pipeline
-    # rag_config = RAGConfig()
-    # rag_pipeline = RAGPipeline(...)
-    # app.state.rag = rag_pipeline
+    # Get configuration from environment
+    model_config_name = os.getenv("MODEL_CONFIG", "tiny-llama")
+    embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    vector_db_backend = os.getenv("VECTOR_DB_BACKEND", "chromadb")
+    chroma_persist_dir = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
 
-    # TODO: Initialize monitoring
-    # metrics_manager.start()
+    try:
+        # Initialize LLM server
+        logger.info(f"Initializing LLM server with config: {model_config_name}")
+        from ..llm import get_config
 
-    logger.info("Application started successfully")
+        model_config = get_config(model_config_name)
+        llm_server = LLMServer(model_config)
+        await llm_server.initialize()
 
-    yield  # Application is running
+        # Initialize embedding model
+        logger.info(f"Initializing embedding model: {embedding_model_name}")
+        from ..rag import get_embedding_model
+
+        embedding_model = get_embedding_model(embedding_model_name)
+
+        # Initialize retriever
+        logger.info(f"Initializing vector database: {vector_db_backend}")
+        if vector_db_backend == "chromadb":
+            retriever = ChromaDBRetriever(persist_directory=chroma_persist_dir)
+        else:
+            raise ValueError(f"Unsupported vector DB backend: {vector_db_backend}")
+
+        # Initialize RAG pipeline
+        rag_config = RAGConfig(
+            top_k=int(os.getenv("RAG_TOP_K", "5")),
+            chunk_size=int(os.getenv("RAG_CHUNK_SIZE", "512")),
+            chunk_overlap=int(os.getenv("RAG_CHUNK_OVERLAP", "50")),
+        )
+        rag_pipeline = RAGPipeline(embedding_model, retriever, rag_config)
+
+        # Initialize monitoring
+        logger.info("Initializing monitoring...")
+        metrics_collector = get_metrics_collector(model_name=model_config.model_name)
+        metrics_collector.set_model_info(llm_server.get_model_info())
+
+        # Initialize cost tracking
+        cost_config = CostConfig(
+            gpu_cost_per_hour=float(os.getenv("GPU_COST_PER_HOUR", "1.0")),
+        )
+        cost_tracker = CostTracker(config=cost_config, persist_file="./cost_data.json")
+
+        logger.info("LLM deployment platform started successfully!")
+
+    except Exception as e:
+        logger.error(f"Failed to start application: {e}")
+        raise
+
+    yield
 
     # Shutdown
-    logger.info("Shutting down application...")
-
-    # TODO: Cleanup
-    # await app.state.llm.shutdown()
-    # await app.state.rag.cleanup()
-    # metrics_manager.stop()
-
-    logger.info("Application shutdown complete")
+    logger.info("Shutting down LLM deployment platform...")
+    if cost_tracker:
+        cost_tracker.save()
 
 
-# ============================================================================
-# FastAPI Application
-# ============================================================================
-
+# Create FastAPI app
 app = FastAPI(
     title="LLM Deployment Platform",
-    description="Production-ready LLM serving with RAG capabilities",
+    description="Production-ready LLM serving with RAG support",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# ============================================================================
-# Middleware Configuration
-# ============================================================================
+# Add middlewares
+add_middlewares(app)
 
-# TODO: Add CORS middleware
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],  # Configure from settings
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
-
-# TODO: Add custom middleware
-# - Request logging
-# - Error handling
-# - Rate limiting
-# - Token counting
+# Add CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-# ============================================================================
-# Security and Dependencies
-# ============================================================================
-
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-
-async def verify_api_key(api_key: str = Security(api_key_header)) -> str:
-    """
-    Verify API key authentication.
-
-    Args:
-        api_key: API key from header
-
-    Returns:
-        Validated API key
-
-    Raises:
-        HTTPException: If API key is invalid
-
-    TODO: Implement API key verification:
-    1. Check if API key is provided
-    2. Validate against stored keys (env var, database)
-    3. Track usage per API key
-    4. Raise 403 if invalid
-    5. Return key for further processing
-    """
-    # TODO: Implement API key verification
-    # if not api_key:
-    #     raise HTTPException(status_code=403, detail="API key required")
-    #
-    # if api_key not in valid_api_keys:
-    #     raise HTTPException(status_code=403, detail="Invalid API key")
-
-    return api_key or "test-key"
-
-
-def get_llm_server() -> LLMServer:
-    """
-    Dependency to get LLM server instance.
-
-    Returns:
-        LLM server
-
-    TODO: Return LLM server from app state
-    """
-    # TODO: return app.state.llm
-    pass
-
-
-def get_rag_pipeline() -> RAGPipeline:
-    """
-    Dependency to get RAG pipeline instance.
-
-    Returns:
-        RAG pipeline
-
-    TODO: Return RAG pipeline from app state
-    """
-    # TODO: return app.state.rag
-    pass
-
-
-# ============================================================================
-# API Endpoints
-# ============================================================================
-
-@app.get("/", response_model=dict)
+@app.get("/", tags=["root"])
 async def root():
-    """
-    Root endpoint.
-
-    Returns basic API information.
-    """
+    """Root endpoint"""
     return {
-        "name": "LLM Deployment Platform",
+        "message": "LLM Deployment Platform",
         "version": "1.0.0",
-        "status": "running"
+        "endpoints": {
+            "generate": "/generate",
+            "rag_generate": "/rag-generate",
+            "ingest": "/ingest",
+            "health": "/health",
+            "ready": "/ready",
+            "metrics": "/metrics",
+            "models": "/models",
+            "cost": "/cost",
+        },
     }
 
 
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """
-    Health check endpoint.
+@app.get("/health", response_model=HealthResponse, tags=["health"])
+async def health():
+    """Health check endpoint"""
+    model_loaded = llm_server is not None
+    gpu_available = False
+    vector_db_status = "unknown"
 
-    Returns:
-        Health status
+    if llm_server:
+        import torch
 
-    TODO: Implement comprehensive health check:
-    1. Check LLM server status
-    2. Check vector DB connection
-    3. Check GPU availability
-    4. Check memory usage
-    5. Return detailed status
+        gpu_available = torch.cuda.is_available()
 
-    This endpoint is used by:
-    - Kubernetes liveness probes
-    - Load balancers
-    - Monitoring systems
-    """
-    # TODO: Perform health checks
-    # llm_healthy = app.state.llm is not None
-    # gpu_available = torch.cuda.is_available()
+    if rag_pipeline:
+        try:
+            info = rag_pipeline.retriever.get_collection_info()
+            vector_db_status = "healthy"
+        except:
+            vector_db_status = "unhealthy"
+
+    status = "healthy" if model_loaded else "unhealthy"
 
     return HealthResponse(
-        status="healthy",
-        model_loaded=True,
-        gpu_available=False
+        status=status,
+        model_loaded=model_loaded,
+        gpu_available=gpu_available,
+        vector_db_status=vector_db_status,
     )
 
 
-@app.get("/readiness")
-async def readiness_check():
-    """
-    Readiness check endpoint.
+@app.get("/ready", tags=["health"])
+async def ready():
+    """Readiness check endpoint"""
+    if llm_server is None:
+        raise HTTPException(status_code=503, detail="LLM server not ready")
 
-    Different from health check - indicates if the service is ready to
-    accept traffic (model loaded, warmup complete, etc.)
+    # Test model
+    is_healthy = await llm_server.health_check()
 
-    Returns:
-        Readiness status
+    if not is_healthy:
+        raise HTTPException(status_code=503, detail="LLM server health check failed")
 
-    TODO: Check readiness:
-    1. Model fully loaded
-    2. Warmup inference completed
-    3. All dependencies ready
-    4. Return 200 if ready, 503 if not
-    """
-    # TODO: Implement readiness check
     return {"status": "ready"}
 
 
-@app.post("/v1/generate", response_model=GenerateResponse)
-async def generate_text(
-    request: GenerateRequest,
-    api_key: str = Depends(verify_api_key),
-    llm: LLMServer = Depends(get_llm_server)
-):
-    """
-    Generate text completion.
+@app.get("/models", response_model=ModelInfo, tags=["info"])
+async def get_models():
+    """Get model information"""
+    if llm_server is None:
+        raise HTTPException(status_code=503, detail="LLM server not initialized")
 
-    Args:
-        request: Generation request
-        api_key: API key from dependency
-        llm: LLM server from dependency
+    info = llm_server.get_model_info()
 
-    Returns:
-        Generated text response
+    return ModelInfo(
+        model_name=info["model_name"],
+        backend=info["backend"],
+        dtype=info["dtype"],
+        gpu_name=info.get("gpu_name"),
+        max_tokens=info["max_model_len"],
+    )
 
-    TODO: Implement text generation:
-    1. Validate request parameters
-    2. Track request metrics (start time, tokens)
-    3. Generate text with LLM
-    4. Count tokens (input + output)
-    5. Track costs
-    6. Return response with metadata
 
-    OpenAI-compatible endpoint for easy migration.
-    """
-    start_time = time.time()
+@app.post("/generate", response_model=GenerateResponse, tags=["generation"])
+async def generate(request: GenerateRequest):
+    """Generate text from prompt"""
+    if llm_server is None:
+        raise HTTPException(status_code=503, detail="LLM server not initialized")
+
+    # Create LLM request
+    llm_request = LLMGenerationRequest(
+        prompt=request.prompt,
+        max_tokens=request.max_tokens,
+        temperature=request.temperature,
+        top_p=request.top_p,
+        top_k=request.top_k,
+        repetition_penalty=request.repetition_penalty,
+        stream=False,
+        stop_sequences=request.stop_sequences,
+    )
+
+    # Track request
+    with RequestTimer(metrics_collector, "generate") as timer:
+        try:
+            response = await llm_server.generate(llm_request)
+            timer.set_tokens(response.completion_tokens)
+
+            # Track cost
+            if cost_tracker:
+                # Estimate duration from tokens (rough approximation)
+                duration = response.completion_tokens / 50.0  # Assume 50 tokens/sec
+                cost_tracker.record_request(
+                    tokens=response.total_tokens, duration=duration
+                )
+
+            return GenerateResponse(
+                text=response.text,
+                prompt_tokens=response.prompt_tokens,
+                completion_tokens=response.completion_tokens,
+                total_tokens=response.total_tokens,
+                finish_reason=response.finish_reason,
+                model=response.model,
+            )
+
+        except Exception as e:
+            logger.error(f"Generation failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate/stream", tags=["generation"])
+async def generate_stream(request: GenerateRequest):
+    """Generate text with streaming"""
+    if llm_server is None:
+        raise HTTPException(status_code=503, detail="LLM server not initialized")
+
+    # Create LLM request
+    llm_request = LLMGenerationRequest(
+        prompt=request.prompt,
+        max_tokens=request.max_tokens,
+        temperature=request.temperature,
+        top_p=request.top_p,
+        top_k=request.top_k,
+        repetition_penalty=request.repetition_penalty,
+        stream=True,
+        stop_sequences=request.stop_sequences,
+    )
+
+    async def generate():
+        try:
+            async for chunk in await llm_server.generate(llm_request):
+                yield f"data: {chunk}\n\n"
+        except Exception as e:
+            logger.error(f"Streaming generation failed: {e}")
+            yield f"data: [ERROR] {str(e)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/rag-generate", response_model=RAGGenerateResponse, tags=["rag"])
+async def rag_generate(request: RAGGenerateRequest):
+    """Generate answer using RAG"""
+    if llm_server is None or rag_pipeline is None:
+        raise HTTPException(status_code=503, detail="Services not initialized")
+
+    with RequestTimer(metrics_collector, "rag_generate") as timer:
+        try:
+            # Generate answer with RAG
+            rag_response = await rag_pipeline.generate_answer(
+                query=request.query,
+                llm_server=llm_server,
+                system_prompt=request.system_prompt,
+                top_k=request.top_k_retrieval,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                top_p=request.top_p,
+            )
+
+            timer.set_tokens(rag_response.metadata["completion_tokens"])
+
+            # Track cost
+            if cost_tracker:
+                duration = rag_response.metadata["completion_tokens"] / 50.0
+                cost_tracker.record_request(
+                    tokens=rag_response.metadata["total_tokens"],
+                    duration=duration,
+                    vector_db_queries=1,
+                )
+
+            # Convert retrieved chunks
+            chunks = [
+                RetrievedChunk(
+                    text=chunk.text,
+                    score=chunk.score,
+                    metadata=chunk.metadata,
+                    chunk_id=chunk.chunk_id,
+                )
+                for chunk in rag_response.retrieved_chunks
+            ]
+
+            return RAGGenerateResponse(
+                answer=rag_response.answer,
+                retrieved_chunks=chunks,
+                context_length=len(rag_response.context_used),
+                prompt_tokens=rag_response.metadata["prompt_tokens"],
+                completion_tokens=rag_response.metadata["completion_tokens"],
+                total_tokens=rag_response.metadata["total_tokens"],
+                model=rag_response.metadata["model"],
+            )
+
+        except Exception as e:
+            logger.error(f"RAG generation failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ingest", response_model=IngestResponse, tags=["rag"])
+async def ingest_documents(request: IngestRequest):
+    """Ingest documents into vector database"""
+    if rag_pipeline is None:
+        raise HTTPException(status_code=503, detail="RAG pipeline not initialized")
 
     try:
-        # TODO: Generate text
-        # generated_text = await llm.generate(
-        #     prompt=request.prompt,
-        #     max_tokens=request.max_tokens,
-        #     temperature=request.temperature,
-        #     top_p=request.top_p,
-        #     stream=False
-        # )
+        chunks_added = rag_pipeline.add_documents(
+            documents=request.documents,
+            text_key=request.text_key,
+            id_key=request.id_key,
+        )
 
-        # TODO: Count tokens and track metrics
-        # latency_ms = (time.time() - start_time) * 1000
-        # metrics_manager.track_request(latency_ms, tokens_in, tokens_out)
-
-        return GenerateResponse(
-            text="TODO: Implement generation",
-            tokens_generated=0,
-            latency_ms=0.0
+        return IngestResponse(
+            chunks_added=chunks_added, documents_processed=len(request.documents)
         )
 
     except Exception as e:
-        logger.error(f"Generation error: {e}")
+        logger.error(f"Document ingestion failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/v1/generate/stream")
-async def generate_text_stream(
-    request: GenerateRequest,
-    api_key: str = Depends(verify_api_key),
-    llm: LLMServer = Depends(get_llm_server)
-):
-    """
-    Generate text with streaming response.
+@app.get("/metrics", tags=["monitoring"])
+async def metrics():
+    """Prometheus metrics endpoint"""
+    if metrics_collector is None:
+        raise HTTPException(status_code=503, detail="Metrics collector not initialized")
 
-    Args:
-        request: Generation request
-        api_key: API key
-        llm: LLM server
-
-    Returns:
-        Server-Sent Events stream
-
-    TODO: Implement streaming generation:
-    1. Validate request
-    2. Create async generator for LLM output
-    3. Wrap in SSE format
-    4. Return StreamingResponse
-    5. Track metrics after completion
-
-    SSE format:
-    data: {"text": "token", "done": false}\n\n
-    data: {"text": "next", "done": false}\n\n
-    data: {"text": "", "done": true}\n\n
-    """
-    try:
-        # TODO: Create streaming generator
-        # async def token_generator():
-        #     async for token in llm.generate(
-        #         prompt=request.prompt,
-        #         stream=True,
-        #         ...
-        #     ):
-        #         yield token
-
-        # TODO: Wrap in SSE format
-        # return StreamingResponse(
-        #     stream_generator(token_generator()),
-        #     media_type="text/event-stream"
-        # )
-
-        async def dummy_generator():
-            yield "data: TODO: Implement streaming\n\n"
-
-        return StreamingResponse(
-            dummy_generator(),
-            media_type="text/event-stream"
-        )
-
-    except Exception as e:
-        logger.error(f"Streaming error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    metrics_data = metrics_collector.get_metrics()
+    return Response(content=metrics_data, media_type="text/plain")
 
 
-@app.post("/v1/rag/generate", response_model=RAGGenerateResponse)
-async def rag_generate(
-    request: RAGGenerateRequest,
-    api_key: str = Depends(verify_api_key),
-    rag: RAGPipeline = Depends(get_rag_pipeline)
-):
-    """
-    Generate answer using RAG (Retrieval-Augmented Generation).
+@app.get("/cost", response_model=CostBreakdown, tags=["monitoring"])
+async def get_cost():
+    """Get cost breakdown and recommendations"""
+    if cost_tracker is None:
+        raise HTTPException(status_code=503, detail="Cost tracker not initialized")
 
-    Args:
-        request: RAG request with question
-        api_key: API key
-        rag: RAG pipeline
+    breakdown = cost_tracker.get_cost_breakdown()
+    recommendations = cost_tracker.get_optimization_recommendations()
 
-    Returns:
-        Answer with sources
+    current = breakdown["current_period"]
 
-    TODO: Implement RAG generation:
-    1. Validate request
-    2. Process query with RAG pipeline
-    3. Format sources for response
-    4. Track retrieval and generation metrics
-    5. Return answer with citations
-    """
-    start_time = time.time()
-
-    try:
-        # TODO: Perform RAG query
-        # result = await rag.query(
-        #     question=request.question,
-        #     filters=request.filters,
-        #     stream=False
-        # )
-
-        return RAGGenerateResponse(
-            answer="TODO: Implement RAG",
-            sources=[],
-            latency_ms=0.0
-        )
-
-    except Exception as e:
-        logger.error(f"RAG generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return CostBreakdown(
+        total_cost=current["total_cost"],
+        cost_per_request=current["cost_per_request"],
+        cost_per_1k_tokens=current["cost_per_1k_tokens"],
+        estimated_monthly=breakdown["estimated_monthly"],
+        recommendations=recommendations,
+    )
 
 
-@app.post("/v1/chat/completions")
-async def chat_completion(
-    request: dict,  # TODO: Use proper ChatRequest model
-    api_key: str = Depends(verify_api_key),
-    llm: ChatLLMServer = Depends(get_llm_server)
-):
-    """
-    OpenAI-compatible chat completion endpoint.
+def main():
+    """Run the application"""
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "0.0.0.0")
 
-    Args:
-        request: Chat request with messages
-        api_key: API key
-        llm: Chat LLM server
+    uvicorn.run(
+        "src.api.main:app",
+        host=host,
+        port=port,
+        reload=False,
+        log_level="info",
+    )
 
-    Returns:
-        Chat completion response
-
-    TODO: Implement chat completion:
-    1. Parse OpenAI-format request
-    2. Convert to internal format
-    3. Generate chat response
-    4. Format as OpenAI-compatible response
-    5. Support streaming if requested
-
-    OpenAI format:
-    {
-        "model": "gpt-3.5-turbo",
-        "messages": [
-            {"role": "user", "content": "Hello!"}
-        ],
-        "temperature": 0.7,
-        ...
-    }
-    """
-    # TODO: Implement OpenAI-compatible chat
-    pass
-
-
-@app.get("/v1/models")
-async def list_models(api_key: str = Depends(verify_api_key)):
-    """
-    List available models.
-
-    Returns:
-        List of model information
-
-    TODO: Return available models:
-    1. Get loaded model info
-    2. List available adapters (LoRA, etc.)
-    3. Format as model list
-    """
-    # TODO: Implement model listing
-    return {"models": []}
-
-
-@app.get("/v1/stats")
-async def get_stats(api_key: str = Depends(verify_api_key)):
-    """
-    Get server statistics.
-
-    Returns:
-        Server stats and metrics
-
-    TODO: Return statistics:
-    1. GPU utilization
-    2. Request counts
-    3. Average latency
-    4. Token throughput
-    5. Cache hit rate
-    """
-    # TODO: Implement stats endpoint
-    return {}
-
-
-# ============================================================================
-# Metrics Endpoint
-# ============================================================================
-
-# Mount Prometheus metrics at /metrics
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
-
-
-# ============================================================================
-# Error Handlers
-# ============================================================================
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """
-    Global exception handler.
-
-    TODO: Implement error handling:
-    1. Log error with context
-    2. Track error metrics
-    3. Return user-friendly error
-    4. Hide sensitive information
-    """
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return HTTPException(status_code=500, detail="Internal server error")
-
-
-# ============================================================================
-# Application Entry Point
-# ============================================================================
 
 if __name__ == "__main__":
-    import uvicorn
-
-    # TODO: Load configuration from environment
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False,
-        log_level="info"
-    )
+    main()

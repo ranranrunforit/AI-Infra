@@ -1,54 +1,61 @@
-# Multi-stage build for optimized image size
+# Multi-stage Dockerfile for LLM deployment platform
+# Supports both GPU and CPU deployments
 
-# Stage 1: Builder
-FROM python:3.11-slim as builder
+# Stage 1: Base image with CUDA support
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04 as base
 
-# Set working directory
-WORKDIR /build
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    python3-dev \
+    build-essential \
+    git \
+    curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip setuptools wheel
 
-# Install Python dependencies to a local directory
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Stage 2: Dependencies
+FROM base as dependencies
 
-# Stage 2: Runtime
-FROM python:3.11-slim
-
-# Set working directory
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# Copy requirements first for better caching
+COPY requirements.txt .
 
-# Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Python dependencies from builder
-COPY --from=builder /root/.local /home/appuser/.local
+# Stage 3: Application
+FROM dependencies as application
+
+WORKDIR /app
 
 # Copy application code
 COPY src/ ./src/
+COPY prompts/ ./prompts/
+COPY data/ ./data/
 
-# Set environment variables
-ENV PATH=/home/appuser/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    MODEL_DEVICE=cpu \
-    LOG_LEVEL=INFO
+# Create directories for runtime data
+RUN mkdir -p /app/chroma_db /app/models /app/logs
 
-# Change ownership to non-root user
-RUN chown -R appuser:appuser /app
+# Set Python path
+ENV PYTHONPATH=/app
 
-# Switch to non-root user
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
 USER appuser
 
 # Expose port
@@ -56,7 +63,26 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health').raise_for_status()"
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
-CMD ["python", "-m", "uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command
+CMD ["python3", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Stage 4: Development image (with dev dependencies)
+FROM application as development
+
+USER root
+
+COPY requirements-dev.txt .
+RUN pip install --no-cache-dir -r requirements-dev.txt
+
+# Install Jupyter for development
+RUN pip install --no-cache-dir jupyter jupyterlab
+
+USER appuser
+
+# Expose Jupyter port
+EXPOSE 8888
+
+# Development command includes reload
+CMD ["python3", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

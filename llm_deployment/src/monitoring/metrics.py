@@ -1,681 +1,370 @@
 """
-Prometheus Metrics for LLM Infrastructure
+Prometheus metrics for LLM serving and RAG
 
-This module implements comprehensive monitoring metrics for LLM serving.
-Metrics track performance, usage, costs, and system health.
-
-Learning Objectives:
-- Understand Prometheus metrics types
-- Learn LLM-specific monitoring patterns
-- Implement custom metrics collectors
-- Track performance and business metrics
-- Build monitoring dashboards
-
-Key Concepts:
-- Counter: Monotonically increasing (requests, errors)
-- Gauge: Can go up/down (GPU memory, active requests)
-- Histogram: Distribution of values (latency, token count)
-- Summary: Similar to histogram with percentiles
-- Labels: Dimensions for filtering (model, user, endpoint)
-
-Metrics Categories:
-- Request metrics (count, latency, errors)
-- Token metrics (input/output tokens, throughput)
-- Model metrics (GPU utilization, memory, batch size)
-- Cost metrics (cost per request, total spend)
-- Quality metrics (user feedback, error types)
+Tracks:
+- Request rates and latencies
+- Token usage and throughput
+- GPU utilization
+- Cost metrics
+- RAG performance
 """
 
-import time
 import logging
-from typing import Optional, Dict, Any, Callable
-from functools import wraps
-from datetime import datetime
+import time
+from typing import Dict, Any, Optional
+from prometheus_client import (
+    Counter,
+    Histogram,
+    Gauge,
+    Summary,
+    Info,
+    generate_latest,
+    REGISTRY,
+)
 import psutil
+
+try:
+    import pynvml
+    NVML_AVAILABLE = True
+except ImportError:
+    NVML_AVAILABLE = False
+    logging.warning("pynvml not available, GPU metrics will not be collected")
 
 logger = logging.getLogger(__name__)
 
-# TODO: Import Prometheus client
-# try:
-#     from prometheus_client import (
-#         Counter, Gauge, Histogram, Summary,
-#         CollectorRegistry, generate_latest,
-#         CONTENT_TYPE_LATEST
-#     )
-# except ImportError:
-#     raise ImportError("prometheus_client not installed. Install with: pip install prometheus-client")
-
-
-# ============================================================================
-# METRIC DEFINITIONS
-# ============================================================================
-
-# TODO: Define request metrics
-# Request counter with labels
-# llm_requests_total = Counter(
-#     'llm_requests_total',
-#     'Total number of LLM requests',
-#     ['model', 'endpoint', 'status']
-# )
-
-# TODO: Define latency histogram
-# llm_request_duration_seconds = Histogram(
-#     'llm_request_duration_seconds',
-#     'Request duration in seconds',
-#     ['model', 'endpoint'],
-#     buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
-# )
-
-# TODO: Define token metrics
-# llm_tokens_total = Counter(
-#     'llm_tokens_total',
-#     'Total number of tokens processed',
-#     ['model', 'direction']  # direction: input/output
-# )
-
-# TODO: Define throughput gauge
-# llm_tokens_per_second = Gauge(
-#     'llm_tokens_per_second',
-#     'Token generation throughput',
-#     ['model']
-# )
-
-# TODO: Define GPU metrics
-# llm_gpu_memory_used_bytes = Gauge(
-#     'llm_gpu_memory_used_bytes',
-#     'GPU memory used in bytes',
-#     ['gpu_id', 'model']
-# )
-
-# llm_gpu_utilization_percent = Gauge(
-#     'llm_gpu_utilization_percent',
-#     'GPU utilization percentage',
-#     ['gpu_id', 'model']
-# )
-
-# TODO: Define cost metrics
-# llm_cost_usd_total = Counter(
-#     'llm_cost_usd_total',
-#     'Total cost in USD',
-#     ['model', 'customer']
-# )
-
-# TODO: Define active requests
-# llm_active_requests = Gauge(
-#     'llm_active_requests',
-#     'Number of active requests being processed',
-#     ['model']
-# )
-
-# TODO: Define error metrics
-# llm_errors_total = Counter(
-#     'llm_errors_total',
-#     'Total number of errors',
-#     ['model', 'error_type']
-# )
-
-
-# ============================================================================
-# METRICS COLLECTOR
-# ============================================================================
 
 class MetricsCollector:
     """
-    Collect and expose Prometheus metrics for LLM serving.
-
-    TODO: Implement metrics collection
-    - Track all request metrics
-    - Monitor GPU resources
-    - Calculate costs
-    - Expose metrics endpoint
+    Collect and expose Prometheus metrics
     """
 
-    def __init__(
-        self,
-        model_name: str,
-        cost_per_1k_tokens: Optional[Dict[str, float]] = None
-    ):
+    def __init__(self, model_name: str = "llm"):
         """
-        Initialize metrics collector.
+        Initialize metrics collector
 
         Args:
-            model_name: Name of the LLM model
-            cost_per_1k_tokens: Cost configuration
+            model_name: Name of the model for labeling
         """
-        # TODO: Store configuration
-        # self.model_name = model_name
-        # self.cost_per_1k_tokens = cost_per_1k_tokens or {
-        #     "input": 0.0002,
-        #     "output": 0.0002
-        # }
+        self.model_name = model_name
 
-        # TODO: Initialize counters for tracking
-        # self._request_start_times: Dict[str, float] = {}
+        # Initialize GPU monitoring if available
+        self.gpu_available = False
+        if NVML_AVAILABLE:
+            try:
+                pynvml.nvmlInit()
+                self.gpu_available = True
+                self.gpu_count = pynvml.nvmlDeviceGetCount()
+                logger.info(f"GPU monitoring initialized ({self.gpu_count} GPUs)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize GPU monitoring: {e}")
 
-        pass
+        # Request metrics
+        self.request_counter = Counter(
+            "llm_requests_total",
+            "Total number of LLM requests",
+            ["model", "endpoint", "status"],
+        )
+
+        self.request_duration = Histogram(
+            "llm_request_duration_seconds",
+            "LLM request duration in seconds",
+            ["model", "endpoint"],
+            buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+        )
+
+        self.request_in_progress = Gauge(
+            "llm_requests_in_progress",
+            "Number of LLM requests currently being processed",
+            ["model", "endpoint"],
+        )
+
+        # Token metrics
+        self.tokens_generated = Counter(
+            "llm_tokens_generated_total",
+            "Total tokens generated",
+            ["model"],
+        )
+
+        self.tokens_per_request = Summary(
+            "llm_tokens_per_request",
+            "Tokens generated per request",
+            ["model"],
+        )
+
+        self.tokens_per_second = Gauge(
+            "llm_tokens_per_second",
+            "Current token generation rate",
+            ["model"],
+        )
+
+        # GPU metrics
+        self.gpu_utilization = Gauge(
+            "llm_gpu_utilization_percent",
+            "GPU utilization percentage",
+            ["gpu_id"],
+        )
+
+        self.gpu_memory_used = Gauge(
+            "llm_gpu_memory_used_bytes",
+            "GPU memory used in bytes",
+            ["gpu_id"],
+        )
+
+        self.gpu_memory_total = Gauge(
+            "llm_gpu_memory_total_bytes",
+            "Total GPU memory in bytes",
+            ["gpu_id"],
+        )
+
+        self.gpu_temperature = Gauge(
+            "llm_gpu_temperature_celsius",
+            "GPU temperature in Celsius",
+            ["gpu_id"],
+        )
+
+        # Cost metrics
+        self.estimated_cost = Counter(
+            "llm_estimated_cost_usd",
+            "Estimated cost in USD",
+            ["model", "cost_type"],
+        )
+
+        # RAG metrics
+        self.rag_retrievals = Counter(
+            "llm_rag_retrievals_total",
+            "Total RAG retrievals",
+            ["model"],
+        )
+
+        self.rag_chunks_retrieved = Summary(
+            "llm_rag_chunks_retrieved",
+            "Number of chunks retrieved per RAG query",
+            ["model"],
+        )
+
+        self.rag_retrieval_duration = Histogram(
+            "llm_rag_retrieval_duration_seconds",
+            "RAG retrieval duration in seconds",
+            ["model"],
+            buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0],
+        )
+
+        # System metrics
+        self.cpu_percent = Gauge(
+            "llm_cpu_percent",
+            "CPU utilization percentage",
+        )
+
+        self.memory_used = Gauge(
+            "llm_memory_used_bytes",
+            "Memory used in bytes",
+        )
+
+        # Model info
+        self.model_info = Info(
+            "llm_model",
+            "LLM model information",
+        )
 
     def record_request(
         self,
         endpoint: str,
-        status: str = "success"
-    ) -> None:
+        duration: float,
+        status: str = "success",
+        tokens: int = 0,
+    ):
         """
-        Record a completed request.
-
-        TODO: Implement request recording
-        - Increment request counter
-        - Label with model, endpoint, status
-
-        Args:
-            endpoint: API endpoint (/generate, /rag-generate)
-            status: Request status (success, error, timeout)
-        """
-        # TODO: Increment counter
-        # llm_requests_total.labels(
-        #     model=self.model_name,
-        #     endpoint=endpoint,
-        #     status=status
-        # ).inc()
-
-        pass
-
-    def record_latency(
-        self,
-        endpoint: str,
-        duration_seconds: float
-    ) -> None:
-        """
-        Record request latency.
-
-        TODO: Implement latency recording
-        - Observe duration in histogram
-        - Label with model, endpoint
+        Record a request
 
         Args:
             endpoint: API endpoint
-            duration_seconds: Request duration
+            duration: Request duration in seconds
+            status: Request status (success/error)
+            tokens: Tokens generated
         """
-        # TODO: Observe latency
-        # llm_request_duration_seconds.labels(
-        #     model=self.model_name,
-        #     endpoint=endpoint
-        # ).observe(duration_seconds)
+        self.request_counter.labels(
+            model=self.model_name, endpoint=endpoint, status=status
+        ).inc()
 
-        pass
+        self.request_duration.labels(
+            model=self.model_name, endpoint=endpoint
+        ).observe(duration)
 
-    def record_tokens(
-        self,
-        input_tokens: int,
-        output_tokens: int
-    ) -> None:
+        if tokens > 0:
+            self.tokens_generated.labels(model=self.model_name).inc(tokens)
+            self.tokens_per_request.labels(model=self.model_name).observe(tokens)
+
+            # Calculate tokens per second
+            if duration > 0:
+                tps = tokens / duration
+                self.tokens_per_second.labels(model=self.model_name).set(tps)
+
+    def record_rag_retrieval(
+        self, num_chunks: int, duration: float
+    ):
         """
-        Record token usage.
-
-        TODO: Implement token recording
-        - Increment input token counter
-        - Increment output token counter
-        - Calculate and update throughput
+        Record RAG retrieval
 
         Args:
-            input_tokens: Number of input tokens
-            output_tokens: Number of output tokens
+            num_chunks: Number of chunks retrieved
+            duration: Retrieval duration in seconds
         """
-        # TODO: Record input tokens
-        # llm_tokens_total.labels(
-        #     model=self.model_name,
-        #     direction="input"
-        # ).inc(input_tokens)
-
-        # TODO: Record output tokens
-        # llm_tokens_total.labels(
-        #     model=self.model_name,
-        #     direction="output"
-        # ).inc(output_tokens)
-
-        pass
+        self.rag_retrievals.labels(model=self.model_name).inc()
+        self.rag_chunks_retrieved.labels(model=self.model_name).observe(num_chunks)
+        self.rag_retrieval_duration.labels(model=self.model_name).observe(duration)
 
     def record_cost(
-        self,
-        input_tokens: int,
-        output_tokens: int,
-        customer: str = "default"
-    ) -> float:
+        self, amount: float, cost_type: str = "inference"
+    ):
         """
-        Record and return cost.
-
-        TODO: Implement cost recording
-        - Calculate cost based on tokens
-        - Increment cost counter
-        - Return calculated cost
+        Record estimated cost
 
         Args:
-            input_tokens: Number of input tokens
-            output_tokens: Number of output tokens
-            customer: Customer identifier
+            amount: Cost in USD
+            cost_type: Type of cost (inference, storage, etc.)
+        """
+        self.estimated_cost.labels(
+            model=self.model_name, cost_type=cost_type
+        ).inc(amount)
+
+    def update_gpu_metrics(self):
+        """Update GPU metrics"""
+        if not self.gpu_available:
+            return
+
+        try:
+            for i in range(self.gpu_count):
+                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+
+                # Utilization
+                utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                self.gpu_utilization.labels(gpu_id=str(i)).set(utilization.gpu)
+
+                # Memory
+                memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                self.gpu_memory_used.labels(gpu_id=str(i)).set(memory_info.used)
+                self.gpu_memory_total.labels(gpu_id=str(i)).set(memory_info.total)
+
+                # Temperature
+                try:
+                    temperature = pynvml.nvmlDeviceGetTemperature(
+                        handle, pynvml.NVML_TEMPERATURE_GPU
+                    )
+                    self.gpu_temperature.labels(gpu_id=str(i)).set(temperature)
+                except:
+                    pass
+
+        except Exception as e:
+            logger.error(f"Failed to update GPU metrics: {e}")
+
+    def update_system_metrics(self):
+        """Update system metrics"""
+        try:
+            # CPU
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            self.cpu_percent.set(cpu_percent)
+
+            # Memory
+            memory = psutil.virtual_memory()
+            self.memory_used.set(memory.used)
+
+        except Exception as e:
+            logger.error(f"Failed to update system metrics: {e}")
+
+    def set_model_info(self, info: Dict[str, Any]):
+        """
+        Set model information
+
+        Args:
+            info: Model information dict
+        """
+        # Convert all values to strings
+        info_str = {k: str(v) for k, v in info.items()}
+        self.model_info.info(info_str)
+
+    def get_metrics(self) -> bytes:
+        """
+        Get Prometheus metrics in text format
 
         Returns:
-            Cost in USD
+            Metrics in Prometheus text format
         """
-        # TODO: Calculate cost
-        # input_cost = (input_tokens / 1000) * self.cost_per_1k_tokens["input"]
-        # output_cost = (output_tokens / 1000) * self.cost_per_1k_tokens["output"]
-        # total_cost = input_cost + output_cost
+        # Update metrics before returning
+        self.update_gpu_metrics()
+        self.update_system_metrics()
 
-        # TODO: Record cost
-        # llm_cost_usd_total.labels(
-        #     model=self.model_name,
-        #     customer=customer
-        # ).inc(total_cost)
-
-        # return total_cost
-
-        pass
-
-    def record_error(
-        self,
-        error_type: str
-    ) -> None:
-        """
-        Record an error.
-
-        TODO: Implement error recording
-        - Increment error counter
-        - Label with model, error type
-
-        Args:
-            error_type: Type of error (timeout, oom, invalid_input, etc.)
-        """
-        # TODO: Increment error counter
-        # llm_errors_total.labels(
-        #     model=self.model_name,
-        #     error_type=error_type
-        # ).inc()
-
-        pass
-
-    def update_gpu_metrics(
-        self,
-        gpu_id: int,
-        memory_used_bytes: int,
-        utilization_percent: float
-    ) -> None:
-        """
-        Update GPU metrics.
-
-        TODO: Implement GPU metrics update
-        - Set GPU memory gauge
-        - Set GPU utilization gauge
-
-        Args:
-            gpu_id: GPU device ID
-            memory_used_bytes: Memory used in bytes
-            utilization_percent: GPU utilization (0-100)
-        """
-        # TODO: Update GPU metrics
-        # llm_gpu_memory_used_bytes.labels(
-        #     gpu_id=str(gpu_id),
-        #     model=self.model_name
-        # ).set(memory_used_bytes)
-        #
-        # llm_gpu_utilization_percent.labels(
-        #     gpu_id=str(gpu_id),
-        #     model=self.model_name
-        # ).set(utilization_percent)
-
-        pass
-
-    def set_active_requests(self, count: int) -> None:
-        """
-        Set number of active requests.
-
-        TODO: Implement active request tracking
-        - Set gauge to current count
-
-        Args:
-            count: Current number of active requests
-        """
-        # TODO: Set active requests gauge
-        # llm_active_requests.labels(
-        #     model=self.model_name
-        # ).set(count)
-
-        pass
+        return generate_latest(REGISTRY)
 
 
-# ============================================================================
-# DECORATORS
-# ============================================================================
+# Global metrics collector instance
+_metrics_collector: Optional[MetricsCollector] = None
 
-def track_request(
-    collector: MetricsCollector,
-    endpoint: str
-):
+
+def get_metrics_collector(model_name: str = "llm") -> MetricsCollector:
     """
-    Decorator to track request metrics.
-
-    TODO: Implement request tracking decorator
-    - Track request count
-    - Track latency
-    - Track errors
-    - Track active requests
+    Get global metrics collector instance
 
     Args:
-        collector: MetricsCollector instance
-        endpoint: Endpoint name
+        model_name: Name of the model
 
-    Example:
-        @track_request(metrics_collector, "/generate")
-        async def generate(request):
-            ...
+    Returns:
+        MetricsCollector instance
     """
-    def decorator(func: Callable):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            # TODO: Increment active requests
-            # collector.set_active_requests(...)
+    global _metrics_collector
 
-            # TODO: Track start time
-            # start_time = time.time()
+    if _metrics_collector is None:
+        _metrics_collector = MetricsCollector(model_name=model_name)
 
-            try:
-                # TODO: Execute function
-                # result = await func(*args, **kwargs)
-
-                # TODO: Record success
-                # duration = time.time() - start_time
-                # collector.record_request(endpoint, status="success")
-                # collector.record_latency(endpoint, duration)
-
-                # return result
-                pass
-
-            except Exception as e:
-                # TODO: Record error
-                # duration = time.time() - start_time
-                # collector.record_request(endpoint, status="error")
-                # collector.record_latency(endpoint, duration)
-                # collector.record_error(type(e).__name__)
-                # raise
-
-            finally:
-                # TODO: Decrement active requests
-                # collector.set_active_requests(...)
-                pass
-
-        return wrapper
-    return decorator
+    return _metrics_collector
 
 
-def track_tokens(collector: MetricsCollector):
+class RequestTimer:
     """
-    Decorator to track token usage.
-
-    TODO: Implement token tracking decorator
-    - Extract token counts from response
-    - Record tokens
-    - Calculate cost
-
-    Args:
-        collector: MetricsCollector instance
-    """
-    def decorator(func: Callable):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            # TODO: Execute function
-            # result = await func(*args, **kwargs)
-
-            # TODO: Extract token counts from result
-            # if hasattr(result, 'usage'):
-            #     input_tokens = result.usage.prompt_tokens
-            #     output_tokens = result.usage.completion_tokens
-            #
-            #     collector.record_tokens(input_tokens, output_tokens)
-            #     collector.record_cost(input_tokens, output_tokens)
-
-            # return result
-            pass
-
-        return wrapper
-    return decorator
-
-
-# ============================================================================
-# GPU MONITORING
-# ============================================================================
-
-class GPUMonitor:
-    """
-    Monitor GPU metrics.
-
-    TODO: Implement GPU monitoring
-    - Query GPU stats periodically
-    - Update Prometheus metrics
-    - Support multiple GPUs
-    - Handle NVIDIA and AMD GPUs
+    Context manager for timing requests
     """
 
     def __init__(
         self,
-        collector: MetricsCollector,
-        update_interval: int = 5
+        metrics_collector: MetricsCollector,
+        endpoint: str,
     ):
         """
-        Initialize GPU monitor.
+        Initialize timer
 
         Args:
-            collector: MetricsCollector instance
-            update_interval: Update interval in seconds
+            metrics_collector: Metrics collector
+            endpoint: API endpoint
         """
-        # TODO: Store configuration
-        # self.collector = collector
-        # self.update_interval = update_interval
+        self.metrics_collector = metrics_collector
+        self.endpoint = endpoint
+        self.start_time = None
+        self.status = "success"
+        self.tokens = 0
 
-        # TODO: Check if nvidia-smi available
-        # self.has_nvidia = self._check_nvidia()
+    def __enter__(self):
+        self.start_time = time.time()
+        self.metrics_collector.request_in_progress.labels(
+            model=self.metrics_collector.model_name, endpoint=self.endpoint
+        ).inc()
+        return self
 
-        pass
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        duration = time.time() - self.start_time
 
-    def _check_nvidia(self) -> bool:
-        """
-        Check if NVIDIA GPU available.
+        self.metrics_collector.request_in_progress.labels(
+            model=self.metrics_collector.model_name, endpoint=self.endpoint
+        ).dec()
 
-        TODO: Implement NVIDIA check
-        - Try importing pynvml
-        - Initialize NVML
-        - Return availability
+        if exc_type is not None:
+            self.status = "error"
 
-        Returns:
-            True if NVIDIA GPU available
-        """
-        # TODO: Check for NVIDIA GPU
-        # try:
-        #     import pynvml
-        #     pynvml.nvmlInit()
-        #     return True
-        # except Exception:
-        #     return False
+        self.metrics_collector.record_request(
+            endpoint=self.endpoint,
+            duration=duration,
+            status=self.status,
+            tokens=self.tokens,
+        )
 
-        pass
-
-    def get_gpu_stats(self) -> list:
-        """
-        Get current GPU statistics.
-
-        TODO: Implement GPU stats collection
-        - Query all GPUs
-        - Get memory usage
-        - Get utilization
-        - Return list of stats
-
-        Returns:
-            List of dicts with GPU stats
-        """
-        # TODO: Get GPU stats
-        # try:
-        #     import pynvml
-        #     device_count = pynvml.nvmlDeviceGetCount()
-        #     stats = []
-        #
-        #     for i in range(device_count):
-        #         handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-        #         mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        #         util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-        #
-        #         stats.append({
-        #             "gpu_id": i,
-        #             "memory_used": mem_info.used,
-        #             "memory_total": mem_info.total,
-        #             "utilization": util.gpu
-        #         })
-        #
-        #     return stats
-        # except Exception as e:
-        #     logger.error(f"Failed to get GPU stats: {e}")
-        #     return []
-
-        pass
-
-    def update_metrics(self) -> None:
-        """
-        Update GPU metrics.
-
-        TODO: Implement metrics update
-        - Get current GPU stats
-        - Update Prometheus metrics
-        """
-        # TODO: Update metrics
-        # stats = self.get_gpu_stats()
-        # for stat in stats:
-        #     self.collector.update_gpu_metrics(
-        #         gpu_id=stat["gpu_id"],
-        #         memory_used_bytes=stat["memory_used"],
-        #         utilization_percent=stat["utilization"]
-        #     )
-
-        pass
-
-    async def start_monitoring(self) -> None:
-        """
-        Start continuous GPU monitoring.
-
-        TODO: Implement continuous monitoring
-        - Run update loop
-        - Sleep between updates
-        - Handle shutdown gracefully
-        """
-        # TODO: Continuous monitoring
-        # import asyncio
-        # while True:
-        #     self.update_metrics()
-        #     await asyncio.sleep(self.update_interval)
-
-        pass
-
-
-# ============================================================================
-# METRICS ENDPOINT
-# ============================================================================
-
-def create_metrics_endpoint():
-    """
-    Create FastAPI endpoint for Prometheus metrics.
-
-    TODO: Implement metrics endpoint
-    - Return Prometheus metrics format
-    - Set correct content type
-
-    Returns:
-        FastAPI endpoint function
-    """
-    # TODO: Create endpoint
-    # from fastapi import Response
-    #
-    # async def metrics():
-    #     return Response(
-    #         content=generate_latest(),
-    #         media_type=CONTENT_TYPE_LATEST
-    #     )
-    #
-    # return metrics
-
-    pass
-
-
-# ============================================================================
-# EXAMPLE USAGE
-# ============================================================================
-
-"""
-Example Usage:
-
-from fastapi import FastAPI
-from .metrics import MetricsCollector, create_metrics_endpoint, track_request
-
-# Initialize metrics collector
-metrics = MetricsCollector(
-    model_name="llama-2-7b-chat",
-    cost_per_1k_tokens={
-        "input": 0.0002,
-        "output": 0.0002
-    }
-)
-
-# Create FastAPI app
-app = FastAPI()
-
-# Add metrics endpoint
-app.get("/metrics")(create_metrics_endpoint())
-
-# Use decorator on endpoints
-@app.post("/generate")
-@track_request(metrics, "/generate")
-async def generate(request: GenerateRequest):
-    # Process request
-    result = llm_server.generate(request.prompt)
-
-    # Record tokens and cost
-    metrics.record_tokens(
-        input_tokens=result.prompt_tokens,
-        output_tokens=result.completion_tokens
-    )
-    cost = metrics.record_cost(
-        input_tokens=result.prompt_tokens,
-        output_tokens=result.completion_tokens,
-        customer=request.customer_id
-    )
-
-    return result
-
-# Start GPU monitoring
-import asyncio
-
-gpu_monitor = GPUMonitor(metrics, update_interval=5)
-asyncio.create_task(gpu_monitor.start_monitoring())
-
-# Manual metric recording
-metrics.record_request("/generate", status="success")
-metrics.record_latency("/generate", 0.342)
-metrics.record_tokens(input_tokens=50, output_tokens=100)
-metrics.record_error("timeout")
-
-# Query metrics (Prometheus will scrape /metrics endpoint)
-# Example Prometheus queries:
-#
-# Request rate:
-#   rate(llm_requests_total[5m])
-#
-# Error rate:
-#   rate(llm_errors_total[5m]) / rate(llm_requests_total[5m])
-#
-# P95 latency:
-#   histogram_quantile(0.95, llm_request_duration_seconds_bucket)
-#
-# Tokens per second:
-#   rate(llm_tokens_total{direction="output"}[1m])
-#
-# GPU utilization:
-#   avg(llm_gpu_utilization_percent)
-#
-# Total cost:
-#   llm_cost_usd_total
-"""
+    def set_tokens(self, tokens: int):
+        """Set number of tokens generated"""
+        self.tokens = tokens

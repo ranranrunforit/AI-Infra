@@ -1,453 +1,370 @@
 """
-Document Chunking Module
+Document chunking strategies for RAG
 
-Implements various strategies for splitting documents into chunks for RAG:
-- Fixed-size chunking
-- Recursive character splitting
+Implements various chunking methods:
+- Fixed size with overlap
+- Sentence-based
 - Semantic chunking
-- Sentence-aware chunking
-- Markdown-aware chunking
-
-Learning Objectives:
-1. Understand chunking strategies and trade-offs
-2. Handle different document formats
-3. Preserve context across chunks
-4. Optimize chunk size for retrieval
-5. Implement overlap strategies
-
-References:
-- LangChain Text Splitters: https://python.langchain.com/docs/modules/data_connection/document_transformers/
 """
 
 import logging
-import re
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import List, Optional
+from dataclasses import dataclass
+import re
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class Chunk:
-    """
-    Represents a document chunk.
+    """Text chunk with metadata"""
 
-    Attributes:
-        content: Chunk text content
-        metadata: Associated metadata
-        chunk_index: Index within parent document
-        start_char: Starting character position
-        end_char: Ending character position
-    """
-    content: str
+    text: str
+    start_idx: int
+    end_idx: int
+    doc_id: str
+    chunk_id: int
     metadata: dict
-    chunk_index: int
-    start_char: int
-    end_char: int
 
 
-class BaseChunker(ABC):
-    """Abstract base class for document chunkers."""
-
-    @abstractmethod
-    def chunk(self, text: str, metadata: Optional[dict] = None) -> List[Chunk]:
-        """
-        Split text into chunks.
-
-        Args:
-            text: Input text
-            metadata: Optional metadata to attach
-
-        Returns:
-            List of chunks
-        """
-        pass
-
-
-class FixedSizeChunker(BaseChunker):
+class TextChunker:
     """
-    Split text into fixed-size chunks with overlap.
-
-    Simple but effective for uniform documents.
+    Text chunker with multiple strategies
     """
 
     def __init__(
         self,
-        chunk_size: int = 500,
+        chunk_size: int = 512,
         chunk_overlap: int = 50,
-        length_function: callable = len
+        separator: str = "\n\n",
     ):
         """
-        Initialize fixed-size chunker.
+        Initialize chunker
 
         Args:
-            chunk_size: Size of each chunk (in characters or tokens)
+            chunk_size: Target chunk size in characters
             chunk_overlap: Overlap between chunks
-            length_function: Function to measure length (len for chars, token counter for tokens)
-
-        TODO:
-        1. Validate chunk_size > chunk_overlap
-        2. Store parameters
-        3. Set up length function
+            separator: Separator for splitting
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        self.length_function = length_function
+        self.separator = separator
 
         if chunk_overlap >= chunk_size:
             raise ValueError("chunk_overlap must be less than chunk_size")
 
-    def chunk(self, text: str, metadata: Optional[dict] = None) -> List[Chunk]:
+    def chunk_text(
+        self, text: str, doc_id: str, metadata: Optional[dict] = None
+    ) -> List[Chunk]:
         """
-        Split text into fixed-size chunks.
+        Chunk text with overlap
 
         Args:
-            text: Input text
-            metadata: Optional metadata
+            text: Text to chunk
+            doc_id: Document identifier
+            metadata: Additional metadata
 
         Returns:
             List of chunks
-
-        TODO: Implement fixed-size chunking:
-        1. Calculate step size (chunk_size - chunk_overlap)
-        2. Iterate through text with sliding window
-        3. Create chunks maintaining overlap
-        4. Track start/end positions
-        5. Attach metadata to each chunk
-        6. Handle edge cases (last chunk, empty text)
-
-        Example:
-        - Text: "ABCDEFGHIJ" (10 chars)
-        - chunk_size: 5, overlap: 2
-        - Chunks: "ABCDE", "DEFGH", "GHIJ"
         """
         if not text:
             return []
 
+        metadata = metadata or {}
         chunks = []
-        # TODO: Implement chunking logic
-        # step = self.chunk_size - self.chunk_overlap
-        # for i in range(0, len(text), step):
-        #     chunk_text = text[i:i + self.chunk_size]
-        #     chunk = Chunk(
-        #         content=chunk_text,
-        #         metadata=metadata or {},
-        #         chunk_index=len(chunks),
-        #         start_char=i,
-        #         end_char=i + len(chunk_text)
-        #     )
-        #     chunks.append(chunk)
+        start = 0
+        chunk_id = 0
 
+        while start < len(text):
+            end = start + self.chunk_size
+
+            # If not the last chunk, try to break at sentence boundary
+            if end < len(text):
+                # Look for sentence endings in the last 100 characters
+                search_start = max(end - 100, start)
+                search_text = text[search_start:end]
+
+                # Find last sentence ending
+                matches = list(re.finditer(r'[.!?]\s+', search_text))
+                if matches:
+                    last_match = matches[-1]
+                    end = search_start + last_match.end()
+
+            chunk_text = text[start:end].strip()
+
+            if chunk_text:
+                chunk = Chunk(
+                    text=chunk_text,
+                    start_idx=start,
+                    end_idx=end,
+                    doc_id=doc_id,
+                    chunk_id=chunk_id,
+                    metadata=metadata.copy(),
+                )
+                chunks.append(chunk)
+                chunk_id += 1
+
+            # Move start forward, accounting for overlap
+            start = end - self.chunk_overlap
+
+            # Ensure we make progress
+            if start <= chunks[-1].start_idx if chunks else 0:
+                start = end
+
+        logger.debug(f"Created {len(chunks)} chunks from document {doc_id}")
+        return chunks
+
+    def chunk_by_sentences(
+        self,
+        text: str,
+        doc_id: str,
+        sentences_per_chunk: int = 5,
+        metadata: Optional[dict] = None,
+    ) -> List[Chunk]:
+        """
+        Chunk text by sentences
+
+        Args:
+            text: Text to chunk
+            doc_id: Document identifier
+            sentences_per_chunk: Number of sentences per chunk
+            metadata: Additional metadata
+
+        Returns:
+            List of chunks
+        """
+        if not text:
+            return []
+
+        metadata = metadata or {}
+
+        # Split into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        chunks = []
+        chunk_id = 0
+
+        for i in range(0, len(sentences), sentences_per_chunk):
+            chunk_sentences = sentences[i : i + sentences_per_chunk]
+            chunk_text = " ".join(chunk_sentences)
+
+            # Find position in original text
+            start_idx = text.find(chunk_sentences[0])
+            end_idx = start_idx + len(chunk_text)
+
+            chunk = Chunk(
+                text=chunk_text,
+                start_idx=start_idx if start_idx >= 0 else 0,
+                end_idx=end_idx,
+                doc_id=doc_id,
+                chunk_id=chunk_id,
+                metadata=metadata.copy(),
+            )
+            chunks.append(chunk)
+            chunk_id += 1
+
+        logger.debug(
+            f"Created {len(chunks)} sentence-based chunks from document {doc_id}"
+        )
+        return chunks
+
+    def chunk_by_separator(
+        self,
+        text: str,
+        doc_id: str,
+        separator: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> List[Chunk]:
+        """
+        Chunk text by separator (e.g., paragraphs)
+
+        Args:
+            text: Text to chunk
+            doc_id: Document identifier
+            separator: Separator pattern (uses default if None)
+            metadata: Additional metadata
+
+        Returns:
+            List of chunks
+        """
+        if not text:
+            return []
+
+        separator = separator or self.separator
+        metadata = metadata or {}
+
+        # Split by separator
+        sections = text.split(separator)
+        sections = [s.strip() for s in sections if s.strip()]
+
+        chunks = []
+        chunk_id = 0
+        current_pos = 0
+
+        for section in sections:
+            # Find position in original text
+            start_idx = text.find(section, current_pos)
+            end_idx = start_idx + len(section)
+
+            chunk = Chunk(
+                text=section,
+                start_idx=start_idx if start_idx >= 0 else current_pos,
+                end_idx=end_idx,
+                doc_id=doc_id,
+                chunk_id=chunk_id,
+                metadata=metadata.copy(),
+            )
+            chunks.append(chunk)
+            chunk_id += 1
+            current_pos = end_idx
+
+        logger.debug(
+            f"Created {len(chunks)} separator-based chunks from document {doc_id}"
+        )
+        return chunks
+
+    def chunk_with_context(
+        self,
+        text: str,
+        doc_id: str,
+        context_sentences: int = 1,
+        metadata: Optional[dict] = None,
+    ) -> List[Chunk]:
+        """
+        Chunk text with surrounding context
+
+        Args:
+            text: Text to chunk
+            doc_id: Document identifier
+            context_sentences: Number of context sentences before/after
+            metadata: Additional metadata
+
+        Returns:
+            List of chunks with context
+        """
+        # First chunk by sentences
+        sentence_chunks = self.chunk_by_sentences(
+            text, doc_id, sentences_per_chunk=1, metadata=metadata
+        )
+
+        chunks = []
+        chunk_id = 0
+
+        for i, chunk in enumerate(sentence_chunks):
+            # Get context
+            context_before = []
+            context_after = []
+
+            for j in range(1, context_sentences + 1):
+                if i - j >= 0:
+                    context_before.insert(0, sentence_chunks[i - j].text)
+                if i + j < len(sentence_chunks):
+                    context_after.append(sentence_chunks[i + j].text)
+
+            # Combine with context
+            chunk_text = " ".join(
+                context_before + [chunk.text] + context_after
+            )
+
+            new_chunk = Chunk(
+                text=chunk_text,
+                start_idx=chunk.start_idx,
+                end_idx=chunk.end_idx,
+                doc_id=doc_id,
+                chunk_id=chunk_id,
+                metadata={
+                    **metadata,
+                    "context_sentences": context_sentences,
+                    "main_sentence": chunk.text,
+                },
+            )
+            chunks.append(new_chunk)
+            chunk_id += 1
+
+        logger.debug(
+            f"Created {len(chunks)} context-aware chunks from document {doc_id}"
+        )
         return chunks
 
 
-class RecursiveCharacterChunker(BaseChunker):
+class TokenBasedChunker:
     """
-    Recursively split text using multiple separators.
-
-    Tries to keep paragraphs, sentences, and words together.
-    This is the most commonly used chunker in practice.
+    Chunk text based on token count instead of characters
     """
 
     def __init__(
         self,
-        chunk_size: int = 500,
+        tokenizer,
+        chunk_size: int = 512,
         chunk_overlap: int = 50,
-        separators: Optional[List[str]] = None
     ):
         """
-        Initialize recursive chunker.
+        Initialize token-based chunker
 
         Args:
-            chunk_size: Target chunk size
-            chunk_overlap: Overlap between chunks
-            separators: List of separators to try (in order)
-
-        TODO:
-        1. Store parameters
-        2. Set default separators if not provided:
-           ["\n\n", "\n", ". ", " ", ""]
-           (paragraph, line, sentence, word, character)
+            tokenizer: Tokenizer to use for counting tokens
+            chunk_size: Target chunk size in tokens
+            chunk_overlap: Overlap between chunks in tokens
         """
+        self.tokenizer = tokenizer
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        self.separators = separators or ["\n\n", "\n", ". ", " ", ""]
 
-    def chunk(self, text: str, metadata: Optional[dict] = None) -> List[Chunk]:
+    def chunk_text(
+        self, text: str, doc_id: str, metadata: Optional[dict] = None
+    ) -> List[Chunk]:
         """
-        Recursively split text.
+        Chunk text by token count
 
         Args:
-            text: Input text
-            metadata: Optional metadata
+            text: Text to chunk
+            doc_id: Document identifier
+            metadata: Additional metadata
 
         Returns:
             List of chunks
-
-        TODO: Implement recursive chunking:
-        1. Try first separator
-        2. If chunks are too large, recursively split with next separator
-        3. Merge small chunks if possible
-        4. Add overlap between chunks
-        5. Preserve natural boundaries (paragraphs, sentences)
-
-        Algorithm:
-        - Split by first separator (e.g., "\n\n")
-        - For each piece:
-          - If too large: recursively split with next separator
-          - If too small: merge with adjacent pieces
-        - Add overlap at chunk boundaries
         """
         if not text:
             return []
 
-        # TODO: Implement recursive splitting
-        chunks = self._recursive_split(text, self.separators)
+        metadata = metadata or {}
 
-        # TODO: Convert to Chunk objects with metadata
-        return self._create_chunks(chunks, metadata)
+        # Tokenize entire text
+        tokens = self.tokenizer.encode(text)
+        chunks = []
+        chunk_id = 0
 
-    def _recursive_split(self, text: str, separators: List[str]) -> List[str]:
-        """
-        Recursively split text.
+        start_token = 0
+        while start_token < len(tokens):
+            end_token = start_token + self.chunk_size
 
-        Args:
-            text: Text to split
-            separators: Remaining separators to try
+            # Get chunk tokens
+            chunk_tokens = tokens[start_token:end_token]
 
-        Returns:
-            List of text chunks
+            # Decode back to text
+            chunk_text = self.tokenizer.decode(
+                chunk_tokens, skip_special_tokens=True
+            )
 
-        TODO: Implement recursive splitting logic
-        """
-        # TODO: Implement
-        pass
+            chunk = Chunk(
+                text=chunk_text,
+                start_idx=start_token,
+                end_idx=end_token,
+                doc_id=doc_id,
+                chunk_id=chunk_id,
+                metadata={
+                    **metadata,
+                    "token_count": len(chunk_tokens),
+                },
+            )
+            chunks.append(chunk)
+            chunk_id += 1
 
-    def _create_chunks(self, texts: List[str], metadata: Optional[dict]) -> List[Chunk]:
-        """
-        Convert text chunks to Chunk objects.
+            # Move forward with overlap
+            start_token = end_token - self.chunk_overlap
 
-        Args:
-            texts: List of text chunks
-            metadata: Metadata to attach
-
-        Returns:
-            List of Chunk objects
-
-        TODO: Create Chunk objects with proper indexing
-        """
-        # TODO: Implement
-        return []
-
-
-class SemanticChunker(BaseChunker):
-    """
-    Split text based on semantic similarity.
-
-    Uses embeddings to determine natural breakpoints.
-    More sophisticated but slower than character-based chunking.
-    """
-
-    def __init__(
-        self,
-        embedding_model,
-        breakpoint_threshold: float = 0.7,
-        min_chunk_size: int = 100,
-        max_chunk_size: int = 1000
-    ):
-        """
-        Initialize semantic chunker.
-
-        Args:
-            embedding_model: Model for computing embeddings
-            breakpoint_threshold: Similarity threshold for splitting
-            min_chunk_size: Minimum chunk size
-            max_chunk_size: Maximum chunk size
-
-        TODO:
-        1. Store embedding model
-        2. Set thresholds
-        3. Initialize sentence splitter
-        """
-        self.embedding_model = embedding_model
-        self.breakpoint_threshold = breakpoint_threshold
-        self.min_chunk_size = min_chunk_size
-        self.max_chunk_size = max_chunk_size
-
-    def chunk(self, text: str, metadata: Optional[dict] = None) -> List[Chunk]:
-        """
-        Split text semantically.
-
-        Args:
-            text: Input text
-            metadata: Optional metadata
-
-        Returns:
-            List of chunks
-
-        TODO: Implement semantic chunking:
-        1. Split text into sentences
-        2. Compute embedding for each sentence
-        3. Calculate cosine similarity between consecutive sentences
-        4. Insert breakpoints where similarity drops below threshold
-        5. Merge small chunks, split large chunks
-        6. Return semantic chunks
-
-        Algorithm:
-        - For consecutive sentences i and i+1:
-        - If similarity(sent_i, sent_i+1) < threshold:
-          - Insert breakpoint
-        - Ensures chunks are semantically coherent
-        """
-        # TODO: Implement semantic chunking
-        pass
-
-    def _split_sentences(self, text: str) -> List[str]:
-        """
-        Split text into sentences.
-
-        Args:
-            text: Input text
-
-        Returns:
-            List of sentences
-
-        TODO: Implement sentence splitting:
-        - Use regex or spaCy/NLTK
-        - Handle edge cases (abbreviations, decimals)
-        """
-        # Simple regex-based sentence splitting
-        # TODO: Improve with NLP library
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        return [s.strip() for s in sentences if s.strip()]
-
-
-class MarkdownChunker(BaseChunker):
-    """
-    Markdown-aware chunking that respects structure.
-
-    Preserves headers, code blocks, lists, etc.
-    """
-
-    def __init__(
-        self,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50,
-        preserve_headers: bool = True
-    ):
-        """
-        Initialize markdown chunker.
-
-        Args:
-            chunk_size: Target chunk size
-            chunk_overlap: Overlap between chunks
-            preserve_headers: Include parent headers in each chunk
-
-        TODO:
-        1. Store parameters
-        2. Set up markdown parser
-        3. Define structural elements to preserve
-        """
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-        self.preserve_headers = preserve_headers
-
-    def chunk(self, text: str, metadata: Optional[dict] = None) -> List[Chunk]:
-        """
-        Split markdown text.
-
-        Args:
-            text: Markdown text
-            metadata: Optional metadata
-
-        Returns:
-            List of chunks
-
-        TODO: Implement markdown chunking:
-        1. Parse markdown structure (headers, code blocks, lists)
-        2. Split at natural boundaries (headers, horizontal rules)
-        3. Keep code blocks together
-        4. Preserve header context if enabled
-        5. Handle nested lists and quotes
-
-        Preservation strategy:
-        - If preserve_headers=True, prepend parent headers to chunks
-        - Example:
-          # Chapter 1
-          ## Section 1.1
-          Content here...
-
-          Chunk: "# Chapter 1\n## Section 1.1\nContent here..."
-        """
-        # TODO: Implement markdown-aware chunking
-        pass
-
-    def _extract_headers(self, text: str) -> List[tuple]:
-        """
-        Extract headers and their positions.
-
-        Args:
-            text: Markdown text
-
-        Returns:
-            List of (level, text, position) tuples
-
-        TODO: Parse markdown headers (# ## ###)
-        """
-        # TODO: Implement header extraction
-        pass
-
-
-# ============================================================================
-# Utility Functions
-# ============================================================================
-
-def estimate_optimal_chunk_size(
-    documents: List[str],
-    embedding_model,
-    target_retrieval_size: int = 5
-) -> int:
-    """
-    Estimate optimal chunk size for a document collection.
-
-    Args:
-        documents: Sample documents
-        embedding_model: Embedding model
-        target_retrieval_size: Number of chunks to retrieve
-
-    Returns:
-        Recommended chunk size
-
-    TODO: Implement optimization:
-    1. Try different chunk sizes
-    2. Measure retrieval quality
-    3. Consider context window size
-    4. Balance between granularity and context
-    5. Return optimal size
-
-    Factors:
-    - Model context window (e.g., 4K tokens)
-    - Number of retrieved chunks
-    - Document structure
-    - Query types
-    """
-    # TODO: Implement chunk size optimization
-    pass
-
-
-def count_tokens(text: str, tokenizer) -> int:
-    """
-    Count tokens in text.
-
-    Args:
-        text: Input text
-        tokenizer: Tokenizer to use
-
-    Returns:
-        Number of tokens
-
-    TODO: Implement token counting using tokenizer
-    """
-    # TODO: Implement
-    pass
+        logger.debug(
+            f"Created {len(chunks)} token-based chunks from document {doc_id}"
+        )
+        return chunks

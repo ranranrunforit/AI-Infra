@@ -1,90 +1,87 @@
-# Makefile for Model Serving System
+.PHONY: help install install-dev test lint format clean docker-build docker-up docker-down k8s-deploy k8s-delete run
 
-.PHONY: help install test lint format clean docker-build docker-run k8s-deploy k8s-delete
+help:
+	@echo "Available commands:"
+	@echo "  make install       - Install dependencies"
+	@echo "  make install-dev   - Install dev dependencies"
+	@echo "  make test          - Run tests"
+	@echo "  make lint          - Run linting"
+	@echo "  make format        - Format code"
+	@echo "  make clean         - Clean generated files"
+	@echo "  make docker-build  - Build Docker image"
+	@echo "  make docker-up     - Start Docker Compose stack"
+	@echo "  make docker-down   - Stop Docker Compose stack"
+	@echo "  make k8s-deploy    - Deploy to Kubernetes"
+	@echo "  make k8s-delete    - Delete from Kubernetes"
+	@echo "  make run           - Run API locally"
 
-help: ## Show this help message
-	@echo 'Usage: make [target]'
-	@echo ''
-	@echo 'Available targets:'
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-
-install: ## Install dependencies
+install:
 	pip install -r requirements.txt
+
+install-dev:
 	pip install -r requirements-dev.txt
+	pre-commit install
 
-test: ## Run tests
-	pytest tests/ -v --cov=src --cov-report=term-missing
+test:
+	pytest tests/ -v --cov=src --cov-report=html --cov-report=term
 
-test-fast: ## Run tests without coverage
-	pytest tests/ -v
+test-fast:
+	pytest tests/ -v -m "not slow"
 
-lint: ## Run linters
-	flake8 src/ tests/ --max-line-length=100 --extend-ignore=E203,W503
-	mypy src/ --ignore-missing-imports
+lint:
+	flake8 src/ tests/
+	mypy src/
 
-format: ## Format code
+format:
 	black src/ tests/
 	isort src/ tests/
 
-format-check: ## Check code formatting
-	black --check src/ tests/
-	isort --check-only src/ tests/
-
-clean: ## Clean temporary files
-	find . -type d -name "__pycache__" -exec rm -rf {} +
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type d -name "*.egg-info" -exec rm -rf {} +
-	rm -rf .pytest_cache .coverage htmlcov/ dist/ build/
+	rm -rf .pytest_cache .mypy_cache .coverage htmlcov
+	rm -rf build dist *.egg-info
 
-run: ## Run application locally
-	python -m uvicorn src.api:app --reload --host 0.0.0.0 --port 8000
+docker-build:
+	docker build -t llm-deployment-platform:latest .
 
-docker-build: ## Build Docker image
-	docker build -t model-serving-api:latest .
-
-docker-run: ## Run Docker container
-	docker run -p 8000:8000 \
-		-e MODEL_DEVICE=cpu \
-		-e LOG_LEVEL=INFO \
-		--name model-serving \
-		model-serving-api:latest
-
-docker-stop: ## Stop Docker container
-	docker stop model-serving
-	docker rm model-serving
-
-docker-compose-up: ## Start all services with docker-compose
+docker-up:
 	docker-compose up -d
 
-docker-compose-down: ## Stop all services
+docker-down:
 	docker-compose down
 
-docker-compose-logs: ## View docker-compose logs
-	docker-compose logs -f
+docker-logs:
+	docker-compose logs -f llm-api
 
-k8s-deploy: ## Deploy to Kubernetes
-	./scripts/deploy.sh
+k8s-deploy:
+	kubectl apply -f kubernetes/namespace.yaml
+	kubectl apply -f kubernetes/configmap.yaml
+	kubectl apply -f kubernetes/pvc.yaml
+	kubectl apply -f kubernetes/deployment.yaml
+	kubectl apply -f kubernetes/service.yaml
+	kubectl apply -f kubernetes/hpa.yaml
 
-k8s-delete: ## Delete Kubernetes deployment
-	kubectl delete namespace model-serving
+k8s-delete:
+	kubectl delete -f kubernetes/ --ignore-not-found=true
 
-k8s-logs: ## View Kubernetes logs
-	kubectl logs -f deployment/model-serving -n model-serving
+k8s-logs:
+	kubectl logs -f deployment/llm-api -n llm-platform
 
-k8s-status: ## Check Kubernetes deployment status
-	kubectl get pods -n model-serving
-	kubectl get svc -n model-serving
+run:
+	python -m uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
-smoke-test: ## Run smoke tests
-	./scripts/test-deployment.sh
+# Development helpers
+dev-setup:
+	python -m venv venv
+	./venv/bin/pip install -r requirements-dev.txt
+	cp .env.example .env
 
-load-test: ## Run load tests
-	./scripts/load-test.sh
+benchmark:
+	python scripts/benchmark.sh
 
-setup: ## Run setup script
-	./scripts/setup.sh
+download-model:
+	bash scripts/download-model.sh tiny-llama
 
-all: format lint test ## Run format, lint, and test
-
-ci: lint test ## Run CI checks (lint and test)
+ingest-sample-data:
+	python -m scripts.ingest_docs data/sample-docs/

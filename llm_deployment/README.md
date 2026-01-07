@@ -1,135 +1,71 @@
-# Project 08: LLM Deployment Platform
+# Project 03: LLM Deployment Platform
 
-## Overview
+A production-ready LLM deployment platform with RAG support, GPU optimization, comprehensive monitoring, and cost tracking.
 
-Build a production-ready LLM deployment platform serving open-source models (e.g., Llama 2 7B) with RAG (Retrieval-Augmented Generation), advanced optimizations, cost monitoring, and performance tuning.
+## Features
 
-## Learning Objectives
+- **LLM Serving**: High-performance serving with vLLM (with transformers fallback)
+- **RAG System**: Complete Retrieval-Augmented Generation pipeline with vector database
+- **Document Ingestion**: Multi-format document loading (PDF, TXT, MD, HTML, JSON, CSV)
+- **GPU Optimization**: FP16 quantization, continuous batching, KV cache optimization
+- **Monitoring**: Prometheus metrics, Grafana dashboards, GPU monitoring
+- **Cost Tracking**: Real-time cost calculation and optimization recommendations
+- **Production-Ready**: Docker, Kubernetes, CI/CD, comprehensive testing
 
-- Deploy and serve open-source LLMs at scale
-- Implement model quantization and optimization (FP16, INT8)
-- Build RAG system with vector database
-- Optimize LLM inference for cost and performance
-- Implement LLM-specific monitoring
-- Understand and manage LLM infrastructure costs
+## Quick Start
 
-## Prerequisites
+### Local Development
 
-- Completed Projects 01 and 02
-- Completed Modules 01-10 (especially mod-110: LLM Infrastructure Basics)
-- Understanding of large language models
-- Familiarity with transformer architectures
-- Access to GPU instance (cloud or local)
+```bash
+# 1. Clone and setup
+cd project-103-llm-deployment
+python -m venv venv
+source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+pip install -r requirements.txt
 
-## Project Specifications
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your settings
 
-Based on [proj-103 from project-specifications.json](../../curriculum/project-specifications.json)
+# 3. Run the API
+python -m uvicorn src.api.main:app --reload
 
-**Duration:** 50 hours
-
-**Difficulty:** High
-
-## Technologies
-
-- **LLM Serving:** vLLM or TensorRT-LLM
-- **Vector Database:** Pinecone, Weaviate, or Milvus
-- **LLM Framework:** Hugging Face Transformers
-- **RAG Framework:** LangChain or LlamaIndex
-- **API:** FastAPI
-- **Containerization:** Docker, Kubernetes
-- **Monitoring:** Prometheus, Grafana
-
-## Project Structure
-
-```
-project-103-llm-deployment/
-├── README.md (this file)
-├── requirements.txt
-├── Dockerfile
-├── docker-compose.yml
-├── .env.example
-├── src/
-│   ├── llm/               # LLM serving logic
-│   ├── rag/               # RAG implementation
-│   ├── api/               # FastAPI application
-│   ├── embeddings/        # Embedding generation
-│   └── ingestion/         # Document ingestion pipeline
-├── tests/
-│   ├── test_llm.py
-│   ├── test_rag.py
-│   └── test_api.py
-├── kubernetes/            # K8s manifests with GPU config
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   ├── gpu-node-pool.yaml
-│   └── hpa.yaml
-├── monitoring/            # Prometheus, Grafana configs
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── RAG.md
-│   ├── OPTIMIZATION.md
-│   ├── COST.md
-│   └── DEPLOYMENT.md
-├── prompts/               # Prompt templates
-├── data/                  # Sample documents for RAG
-└── notebooks/             # Experimentation notebooks
+# 4. Access the API
+# Swagger docs: http://localhost:8000/docs
+# Metrics: http://localhost:8000/metrics
 ```
 
-## Key Features to Implement
+### Docker Deployment
 
-### 1. LLM Serving
+```bash
+# Start all services (API, ChromaDB, Prometheus, Grafana)
+docker-compose up -d
 
-```python
-# TODO: Implement LLM serving with vLLM
-# - Model loading and quantization (FP16/INT8)
-# - Continuous batching
-# - KV cache optimization
-# - Streaming responses
+# View logs
+docker-compose logs -f llm-api
+
+# Stop services
+docker-compose down
 ```
 
-### 2. RAG System
+### Kubernetes Deployment
 
-```python
-# TODO: Implement RAG pipeline
-# - Document ingestion and chunking
-# - Embedding generation
-# - Vector database integration
-# - Retrieval with similarity search
-# - Context injection into prompts
+```bash
+# Apply manifests
+kubectl apply -f kubernetes/namespace.yaml
+kubectl apply -f kubernetes/configmap.yaml
+kubectl apply -f kubernetes/secret.yaml  # Create secrets first!
+kubectl apply -f kubernetes/pvc.yaml
+kubectl apply -f kubernetes/deployment.yaml
+kubectl apply -f kubernetes/service.yaml
+kubectl apply -f kubernetes/hpa.yaml
+
+# Check status
+kubectl get pods -n llm-platform
+kubectl logs -f deployment/llm-api -n llm-platform
 ```
 
-### 3. API Endpoints
-
-```python
-# TODO: Implement FastAPI endpoints
-# - POST /generate (standard generation)
-# - POST /rag-generate (RAG-augmented generation)
-# - GET /health
-# - GET /metrics
-# - Streaming support (SSE or WebSocket)
-```
-
-### 4. Performance Optimization
-
-```python
-# TODO: Implement optimizations
-# - Model quantization (reduce memory by 30%+)
-# - Continuous batching (increase throughput 3-5x)
-# - GPU utilization monitoring
-# - Request queuing and batching
-```
-
-### 5. Cost Monitoring
-
-```python
-# TODO: Implement cost tracking
-# - Cost per request calculation
-# - Monthly cost projections
-# - Cost optimization recommendations
-# - Dashboard showing cost trends
-```
-
-## Architecture Diagram
+## Architecture
 
 ```
 ┌─────────────┐
@@ -150,9 +86,9 @@ project-103-llm-deployment/
      │             │
      ▼             │
 ┌──────────┐       │
-│ Vector   │       │
-│ Database │       │
-│(Pinecone)│       │
+│ ChromaDB │       │
+│ (Vector  │       │
+│Database) │       │
 └──────────┘       │
      │             │
      └─────┬───────┘
@@ -165,149 +101,277 @@ project-103-llm-deployment/
            │
            ▼
     ┌──────────────┐
-    │  Prometheus  │
-    │  Monitoring  │
+    │ Monitoring   │
+    │ (Prometheus, │
+    │  Grafana)    │
     └──────────────┘
 ```
 
-## Hardware Requirements
+## API Endpoints
+
+### Core Endpoints
+
+- `POST /generate` - Direct LLM text generation
+- `POST /generate/stream` - Streaming generation (SSE)
+- `POST /rag-generate` - RAG-augmented generation
+- `POST /ingest` - Ingest documents into vector database
+
+### Management Endpoints
+
+- `GET /health` - Health check
+- `GET /ready` - Readiness check
+- `GET /models` - Model information
+- `GET /metrics` - Prometheus metrics
+- `GET /cost` - Cost breakdown and recommendations
+
+## Configuration
+
+### Environment Variables
+
+Key environment variables (see `.env.example`):
+
+```bash
+# Model Configuration
+MODEL_CONFIG=tiny-llama              # Model to use
+EMBEDDING_MODEL=all-MiniLM-L6-v2     # Embedding model
+VECTOR_DB_BACKEND=chromadb           # Vector database
+
+# RAG Settings
+RAG_TOP_K=5                          # Number of chunks to retrieve
+RAG_CHUNK_SIZE=512                   # Chunk size in characters
+RAG_CHUNK_OVERLAP=50                 # Overlap between chunks
+
+# Cost Tracking
+GPU_COST_PER_HOUR=1.0                # GPU cost for tracking
+
+# Rate Limiting
+RATE_LIMIT_RPM=60                    # Requests per minute
+
+# Paths
+CHROMA_PERSIST_DIR=./chroma_db       # ChromaDB storage
+```
+
+### Model Configurations
+
+Available model configs (see `src/llm/model_config.py`):
+
+- `tiny-llama`: TinyLlama 1.1B (testing, low GPU requirements)
+- `llama2-7b-chat`: Llama 2 7B Chat (production, ~14GB GPU RAM)
+- `llama2-7b-chat-quantized`: Llama 2 7B AWQ quantized (~7GB GPU RAM)
+- `mistral-7b-instruct`: Mistral 7B Instruct (~14GB GPU RAM)
+- `mock`: Mock model for testing without GPU
+
+## GPU Requirements
 
 ### Minimum (Development)
-- GPU: NVIDIA T4 (16GB VRAM)
-- CPU: 4 cores
-- RAM: 16GB
-- Storage: 50GB
+- **GPU**: NVIDIA T4 (16GB VRAM)
+- **CPU**: 4 cores
+- **RAM**: 16GB
+- **Storage**: 50GB
 
 ### Recommended (Production)
-- GPU: NVIDIA A10 or A100 (24GB+ VRAM)
-- CPU: 8 cores
-- RAM: 32GB
-- Storage: 100GB
+- **GPU**: NVIDIA A10 or A100 (24GB+ VRAM)
+- **CPU**: 8 cores
+- **RAM**: 32GB
+- **Storage**: 100GB
 
-## Cost Estimate
+## Performance Targets
 
-**Monthly Cloud Costs:**
-- GPU instance (A10, 24/7): $300-500
+- **Time to first token**: <500ms
+- **Throughput**: >50 tokens/sec
+- **GPU utilization**: >70% under load
+- **API latency (p95)**: <2s for 200 token generation
+
+## Cost Optimization
+
+### Tips
+
+1. **Model Quantization**: Use AWQ/GPTQ quantization to reduce memory by 50%
+2. **Spot Instances**: Use cloud spot/preemptible instances for 60-80% savings
+3. **Auto-scaling**: Scale to zero during off-hours
+4. **Request Batching**: Increase throughput with continuous batching
+5. **Caching**: Cache frequent queries and responses
+
+### Estimated Costs
+
+**Monthly Cloud Costs** (24/7 operation):
+- GPU instance (A10): $300-500
 - Vector database (managed): $50-100
 - Storage and networking: $20-50
-- **Total: $370-650/month**
+- **Total**: $370-650/month
 
-**Cost Optimization Tips:**
-- Use spot instances (60% savings)
-- Scale to zero during off-hours
-- Model quantization (smaller instances)
-- Request batching (higher throughput)
+**Cost Optimizations**:
+- Spot instances: ~$150-250/month (60% savings)
+- Auto-scaling (8hrs/day): ~$100-170/month (70% savings)
 
-## Implementation Roadmap
+## Monitoring
 
-### Phase 1: Basic LLM Serving (Week 1)
-- [ ] Set up vLLM or TensorRT-LLM
-- [ ] Deploy Llama 2 7B model
-- [ ] Implement basic inference API
-- [ ] Add model quantization (FP16)
+### Metrics
 
-### Phase 2: RAG Implementation (Week 2)
-- [ ] Set up vector database
-- [ ] Implement document ingestion pipeline
-- [ ] Create embedding generation
-- [ ] Build RAG retrieval logic
-- [ ] Integrate RAG with LLM
+Access Grafana dashboards at `http://localhost:3000` (Docker) or via LoadBalancer (K8s).
 
-### Phase 3: Optimization (Week 3)
-- [ ] Implement continuous batching
-- [ ] Optimize KV cache
-- [ ] Add request queuing
-- [ ] Achieve 80%+ GPU utilization
-- [ ] Reduce latency to <500ms
+**Key metrics tracked**:
+- Request rates and latencies
+- Token throughput (tokens/sec)
+- GPU utilization and memory
+- Cost per request and monthly projections
+- RAG retrieval performance
+- Error rates and types
 
-### Phase 4: Monitoring & Deployment (Week 4)
-- [ ] Add comprehensive monitoring
-- [ ] Implement cost tracking
-- [ ] Deploy to Kubernetes with GPU
-- [ ] Set up autoscaling
-- [ ] Complete documentation
+### Alerts
 
-## Success Metrics
+Configured alerts (see `monitoring/prometheus/alerts.yml`):
+- High error rate (>5%)
+- High latency (>10s P95)
+- Low GPU utilization (<30%)
+- GPU memory high (>90%)
+- High estimated monthly cost (>$1000)
+- API down
 
-- [ ] LLM serving with <500ms time to first token
-- [ ] Throughput >100 tokens/second
-- [ ] GPU utilization >70% under load
-- [ ] RAG system retrieving relevant context (manual evaluation)
-- [ ] 30%+ memory reduction via quantization
-- [ ] Cost per 1000 requests documented and optimized
-- [ ] Complete monitoring dashboard operational
-- [ ] Documentation allowing others to deploy and extend
+## Testing
 
-## Key Challenges
+```bash
+# Run all tests
+pytest
 
-### 1. GPU Out-of-Memory (OOM)
-**Solution:** Use quantization, smaller batch sizes, model with fewer parameters
+# Run with coverage
+pytest --cov=src --cov-report=html
 
-### 2. Slow Inference
-**Solution:** Enable continuous batching, use GPU, optimize preprocessing
+# Run specific test file
+pytest tests/test_complete_system.py
 
-### 3. Poor RAG Quality
-**Solution:** Tune chunk size, add reranking, improve retrieval parameters
+# Run with verbose output
+pytest -v
 
-### 4. High Costs
-**Solution:** Use spot instances, quantization, batch processing, cache responses
+# Run only fast tests (skip slow integration tests)
+pytest -m "not slow"
+```
 
-## Resources
+## Development
 
-- [vLLM Documentation](https://docs.vllm.ai/)
-- [LangChain Documentation](https://python.langchain.com/docs/)
-- [Hugging Face Transformers](https://huggingface.co/docs/transformers/)
-- [Vector Database Comparison](https://benchmark.vectorview.ai/)
-- [LLM Optimization Guide](https://huggingface.co/docs/transformers/main/en/optimization)
+### Setup Development Environment
 
-## Testing Strategy
+```bash
+# Install dev dependencies
+pip install -r requirements-dev.txt
 
-### 1. Unit Tests
-- Model loading and inference
-- Embedding generation
-- Vector search
-- API endpoints
+# Install pre-commit hooks
+pre-commit install
 
-### 2. Integration Tests
-- End-to-end RAG flow
-- LLM generation quality
-- Retrieval accuracy
+# Run linting
+black src/
+isort src/
+flake8 src/
 
-### 3. Performance Tests
-- Latency benchmarks (p50, p95, p99)
-- Throughput testing (requests/sec)
-- GPU utilization under load
-- Cost per 1000 requests
+# Type checking
+mypy src/
+```
 
-### 4. Quality Assessment
-- RAG relevance evaluation
-- LLM response quality (manual)
-- Prompt engineering testing
+### Project Structure
 
-## Deliverables
+```
+project-103-llm-deployment/
+├── src/
+│   ├── api/              # FastAPI application
+│   ├── llm/              # LLM serving logic
+│   ├── rag/              # RAG implementation
+│   ├── ingestion/        # Document ingestion
+│   └── monitoring/       # Metrics and cost tracking
+├── tests/                # Test suite
+├── kubernetes/           # K8s manifests
+├── monitoring/           # Prometheus & Grafana configs
+├── docs/                 # Documentation
+├── scripts/              # Deployment scripts
+├── data/                 # Sample data
+└── prompts/              # Prompt templates
+```
 
-1. ✅ Working LLM serving API
-2. ✅ Functional RAG system
-3. ✅ Kubernetes deployment with GPU
-4. ✅ Monitoring dashboard
-5. ✅ Cost analysis report
-6. ✅ Performance benchmark results
-7. ✅ Comprehensive documentation
-8. ✅ Demo video (optional)
+## Documentation
 
-## Next Steps
+Detailed documentation available in `/docs`:
 
-1. ✅ Review LLM fundamentals (Module 10)
-2. ✅ Set up GPU instance (local or cloud)
-3. ✅ Start with basic LLM serving
-4. ✅ Implement RAG incrementally
-5. ✅ Optimize and benchmark
-6. ✅ Deploy to production
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture and design
+- [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Deployment guides
+- [OPTIMIZATION.md](docs/OPTIMIZATION.md) - Performance optimization
+- [COST.md](docs/COST.md) - Cost analysis and optimization
+- [GPU.md](docs/GPU.md) - GPU configuration
+- [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
+- [STEP_BY_STEP.md](STEP_BY_STEP.md) - Detailed implementation guide
+
+## Troubleshooting
+
+### Common Issues
+
+**1. GPU not detected**
+```bash
+# Check NVIDIA drivers
+nvidia-smi
+
+# Check Docker GPU support
+docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+```
+
+**2. Out of memory errors**
+- Use a smaller model (`tiny-llama`)
+- Enable quantization
+- Reduce batch size
+- Decrease `max_model_len`
+
+**3. Slow inference**
+- Ensure GPU is being used
+- Check GPU utilization with `nvidia-smi`
+- Enable continuous batching (vLLM default)
+- Increase batch size if GPU memory allows
+
+**4. Vector DB connection issues**
+```bash
+# Check ChromaDB status
+curl http://localhost:8001/api/v1/heartbeat
+
+# Restart ChromaDB
+docker-compose restart chromadb
+```
+
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more issues and solutions.
+
+## Security
+
+- Never commit secrets or API keys
+- Use Kubernetes secrets for sensitive data
+- Enable authentication for production deployments
+- Run containers as non-root user
+- Validate and sanitize all user inputs
+- Rate limiting enabled by default
+- Regular security updates
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Run linting and tests
+6. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Support
+
+For issues and questions:
+- GitHub Issues: [Create an issue]
+- Documentation: See `/docs`
+- Email: ai-infra-curriculum@joshua-ferguson.com
+
+## Acknowledgments
+
+- vLLM for high-performance LLM serving
+- Hugging Face for model hosting
+- ChromaDB for vector storage
+- FastAPI for the web framework
 
 ---
 
-**Note:** This is an advanced project requiring GPU access and significant compute resources. Consider using cloud credits or spot instances to minimize costs.
-
-**Important:** LLM serving is cutting-edge technology (2024-2025). Skills learned here are in extremely high demand!
-
-**Questions?** See [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) or ask in GitHub Discussions.
+**Part of the AI Infrastructure Engineer curriculum**
+**Visit**: https://github.com/ai-infra-curriculum

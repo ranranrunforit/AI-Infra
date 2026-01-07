@@ -1,27 +1,25 @@
 """
-Test suite for model serving system.
+Test suite for LLM deployment platform.
 
-This package contains comprehensive tests for the model serving system,
-including API tests, model loading tests, and utility function tests.
+This package contains comprehensive integration and system tests for the
+LLM deployment platform, covering end-to-end workflows and component integration.
 
 Test Modules:
-    - test_api: FastAPI endpoint tests
-    - test_model: Model loading and inference tests
-    - test_utils: Utility function tests
+    - test_complete_system: Full system integration tests
     - conftest: Pytest fixtures and configuration
 
 Usage:
     Run all tests:
         pytest tests/
 
-    Run specific test module:
-        pytest tests/test_api.py
+    Run with verbose output:
+        pytest tests/ -v
 
     Run with coverage:
         pytest tests/ --cov=src --cov-report=html
 
-    Run with markers:
-        pytest tests/ -m "not slow"
+    Run integration tests only:
+        pytest tests/ -m integration
 """
 
 __all__ = []
