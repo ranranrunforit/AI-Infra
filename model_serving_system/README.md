@@ -312,30 +312,6 @@ pytest --cov=src
 
 Keep your documentation updated as you progress.
 
-## Assessment Rubric
-
-Your project will be assessed on:
-
-| Category | Weight | Criteria |
-|----------|--------|----------|
-| **Functionality** | 40% | API works correctly with various inputs<br>Kubernetes deployment stable<br>Monitoring operational<br>CI/CD working<br>All acceptance criteria met |
-| **Code Quality** | 25% | Clean, well-organized code<br>PEP 8 compliance<br>Proper error handling<br>Externalized configuration<br>Docker/K8s best practices |
-| **Documentation** | 20% | Comprehensive README<br>Architecture diagram<br>Clear deployment instructions<br>API documentation<br>Troubleshooting guide |
-| **Testing** | 10% | Unit tests (70%+ coverage)<br>Integration tests<br>All tests passing |
-| **Innovation** | 5% | Creative solutions<br>Performance optimizations<br>Additional features |
-
-**Passing Score:** 70/100
-
-## Success Metrics
-
-Your project is successful when:
-
-- ✅ API response time p95 <100ms
-- ✅ 99%+ uptime over 7 days of running
-- ✅ Monitoring dashboard showing all key metrics
-- ✅ Load test passing with 20+ concurrent users
-- ✅ Complete documentation allowing others to deploy
-- ✅ CI/CD pipeline deploying successfully
 
 ## Common Pitfalls
 
