@@ -25,7 +25,7 @@ Flask, Docker, Kubernetes, MLflow, Prometheus, Grafana, CI/CD
 
 FastAPI, K8s, Monitoring
 
-**[MLOps Pipeline](./mlops_pipeline)**
+**[End-to-End MLOps Pipeline](./mlops_pipeline)**
 
 Airflow, MLflow, DVC
 
