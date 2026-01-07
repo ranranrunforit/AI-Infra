@@ -294,7 +294,6 @@ Detailed documentation available in `/docs`:
 - [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Deployment guides
 - [OPTIMIZATION.md](docs/OPTIMIZATION.md) - Performance optimization
 - [COST.md](docs/COST.md) - Cost analysis and optimization
-- [GPU.md](docs/GPU.md) - GPU configuration
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
 - [STEP_BY_STEP.md](STEP_BY_STEP.md) - Detailed implementation guide
 
@@ -332,7 +331,7 @@ curl http://localhost:8001/api/v1/heartbeat
 docker-compose restart chromadb
 ```
 
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more issues and solutions.
+See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more issues and solutions.
 
 ## Security
 
