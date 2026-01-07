@@ -109,21 +109,6 @@ When experimenting, track these metrics:
 - **Cost**: Token usage, API costs, GPU utilization
 - **Relevance**: For RAG - retrieval precision, answer accuracy
 
-## 💡 Tips
-
-1. **Start small**: Test with small datasets before scaling
-2. **Cache results**: Save expensive API calls and embeddings
-3. **Version experiments**: Use MLflow to track experiments
-4. **Compare systematically**: Keep other variables constant when testing
-5. **Document findings**: Add markdown cells with insights
-
-## 📚 Resources
-
-- [LLM Fine-tuning Guide](../docs/OPTIMIZATION.md)
-- [RAG Best Practices](../docs/RAG.md)
-- [Cost Optimization](../docs/COST.md)
-- [Prompt Engineering Guide](../prompts/README.md)
-
 ---
 
 **Note:** These notebooks are for experimentation and development. For production use, implement the findings in the main codebase.
