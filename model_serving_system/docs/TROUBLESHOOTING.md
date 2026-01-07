@@ -605,23 +605,3 @@ kubectl top nodes
 watch kubectl top pods -n model-serving
 ```
 
-## Getting Help
-
-If you're still experiencing issues:
-
-1. Collect diagnostic information:
-```bash
-# Generate diagnostic report
-kubectl describe deployment model-serving -n model-serving > deployment.txt
-kubectl logs -l app=model-serving -n model-serving --tail=1000 > logs.txt
-kubectl get events -n model-serving --sort-by='.lastTimestamp' > events.txt
-```
-
-2. Check documentation:
-   - [API Documentation](API.md)
-   - [Architecture Documentation](ARCHITECTURE.md)
-   - [Deployment Guide](DEPLOYMENT.md)
-
-3. Contact support:
-   - Email: ai-infra-curriculum@joshua-ferguson.com
-   - Include diagnostic files and description of issue
