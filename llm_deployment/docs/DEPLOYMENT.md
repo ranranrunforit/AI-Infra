@@ -578,10 +578,3 @@ kubectl logs -f deployment/model-serving -n model-serving
 kubectl logs <pod-name> -n model-serving
 ```
 
-## Support
-
-For deployment issues:
-- Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-- Review pod logs
-- Check monitoring dashboards
-- Contact: ai-infra-curriculum@joshua-ferguson.com
