@@ -589,36 +589,4 @@ kubectl describe pod <pod-name> -n ml-serving
 kubectl logs <pod-name> -n ml-serving
 ```
 
-## Next Steps
 
-1. **Customize for your use case**
-   - Replace synthetic data with real data
-   - Adjust models and features
-   - Configure thresholds
-
-2. **Scale the pipeline**
-   - Add distributed training (Ray, Horovod)
-   - Implement feature store
-   - Add A/B testing capability
-
-3. **Enhance monitoring**
-   - Custom metrics and dashboards
-   - Advanced drift detection
-   - Anomaly detection
-
-4. **Production hardening**
-   - Security hardening
-   - Performance optimization
-   - Cost optimization
-
-## Resources
-
-- [Airflow Documentation](https://airflow.apache.org/docs/)
-- [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
-- [DVC Documentation](https://dvc.org/doc)
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [Prometheus Documentation](https://prometheus.io/docs/)
-
----
-
-**Completed!** You now have a fully functional MLOps pipeline.
