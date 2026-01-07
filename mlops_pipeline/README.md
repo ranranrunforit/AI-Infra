@@ -1,4 +1,4 @@
-# Project 02: End-to-End MLOps Pipeline
+# Project 07: End-to-End MLOps Pipeline
 
 ## Overview
 
@@ -20,13 +20,6 @@ Build a comprehensive MLOps pipeline that manages the complete ML lifecycle from
 - Understanding of ML training workflows
 - Familiarity with data pipelines
 
-## Project Specifications
-
-Based on [proj-102 from project-specifications.json](../../curriculum/project-specifications.json)
-
-**Duration:** 40 hours
-
-**Difficulty:** Medium-High
 
 ## Technologies
 
@@ -182,29 +175,4 @@ Data Sources → Ingestion (Airflow) → Data Lake (S3 + DVC)
                                       Monitoring
 ```
 
-## Resources
 
-- [Apache Airflow Documentation](https://airflow.apache.org/docs/)
-- [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
-- [DVC Documentation](https://dvc.org/doc)
-- [MLOps Best Practices](https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning)
-
-## Timeline
-
-- **Week 1:** Data pipeline and DVC setup
-- **Week 2:** Training pipeline and MLflow integration
-- **Week 3:** Model registry and deployment automation
-- **Week 4:** Monitoring, testing, and documentation
-
-## Next Steps
-
-1. ✅ Review project specifications in detail
-2. ✅ Set up development environment
-3. ✅ Start with data pipeline implementation
-4. ✅ Proceed systematically through each component
-
----
-
-**Note:** This is a learning project. Focus on understanding each component deeply rather than rushing through implementation.
-
-**Questions?** Refer to [CURRICULUM.md](../../CURRICULUM.md) or open a GitHub Discussion.
