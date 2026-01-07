@@ -20,3 +20,15 @@ Prometheus, Grafana, ELK Stack
 **[Production-Ready ML System](./production_ml)**
 
 Flask, Docker, Kubernetes, MLflow, Prometheus, Grafana, CI/CD
+
+**[Model Serving System](./model_serving_system)**
+
+FastAPI, K8s, Monitoring
+
+**[MLOps Pipeline](./mlops_pipeline)**
+
+Airflow, MLflow, DVC
+
+**[LLM Deployment](./llm_deployment)**
+
+vLLM, RAG, Vector DB
