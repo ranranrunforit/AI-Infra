@@ -29,6 +29,6 @@ FastAPI, K8s, Monitoring
 
 Airflow, MLflow, DVC
 
-**[LLM Deployment](./llm_deployment)**
+**[LLM Deployment Platform](./llm_deployment)**
 
 vLLM, RAG, Vector DB
