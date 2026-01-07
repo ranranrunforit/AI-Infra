@@ -1,4 +1,4 @@
-# Project 06: Basic Model Serving System - Implementation Summary
+# Project 06: Model Serving System - Implementation Summary
 
 ## Overview
 
