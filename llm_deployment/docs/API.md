@@ -411,23 +411,3 @@ func predictFromFile(filePath string) {
 5. **Monitor your usage** - Track API calls and latency
 
 ---
-
-## Versioning
-
-Current API version: **v1.0.0**
-
-The API follows semantic versioning. Breaking changes will result in a major version bump.
-
----
-
-## Support
-
-For issues and questions:
-- GitHub Issues: [repository-url]/issues
-- Email: ai-infra-curriculum@joshua-ferguson.com
-
----
-
-## OpenAPI Specification
-
-The complete OpenAPI specification is available at `/openapi.json`. You can import this into tools like Postman or Insomnia for easy testing.
