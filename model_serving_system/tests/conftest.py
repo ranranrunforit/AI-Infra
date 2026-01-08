@@ -14,8 +14,20 @@ os.environ["LOG_LEVEL"] = "ERROR"
 os.environ["ENABLE_METRICS"] = "false"
 
 from src.api import app
-from src.model import ResNetClassifier
+from src.model import ResNetClassifier, initialize_model, cleanup_model
 
+
+@pytest.fixture(scope="session", autouse=True)
+def initialize_test_model():
+    """
+    Session-scoped fixture to initialize the model once for all tests.
+    This runs automatically before any tests.
+    """
+    # Initialize the global model instance
+    initialize_model(device="cpu")
+    yield
+    # Cleanup after all tests
+    cleanup_model()
 
 @pytest.fixture
 def test_client():
@@ -25,7 +37,9 @@ def test_client():
     Returns:
         TestClient: FastAPI test client
     """
-    return TestClient(app)
+    # Use raise_server_exceptions=False to get proper error responses in tests
+    with TestClient(app, raise_server_exceptions=False) as client:
+        yield client
 
 
 @pytest.fixture
