@@ -15,8 +15,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements
 COPY requirements.txt .
 
-# Install Python dependencies to a local directory
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Pre-download model weights AS ROOT
+RUN python -c "import torch; from torchvision.models import resnet50, ResNet50_Weights; print('Downloading ResNet50 model weights...'); model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2); print('Model downloaded successfully!')"
+
+# Verify the cache was created
+RUN echo "=== Verifying model cache ===" && \
+    ls -laR /root/.cache/ && \
+    echo "=== Cache verification complete ==="
 
 # Stage 2: Runtime
 FROM python:3.11-slim
@@ -29,27 +37,43 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
 # Copy Python dependencies from builder
-COPY --from=builder /root/.local /home/appuser/.local
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser
+
+# Copy model cache to /app/.cache (accessible to appuser)
+COPY --from=builder --chown=appuser:appuser /root/.cache /app/.cache
+
+# Verify the cache was copied
+RUN echo "=== Verifying cache in runtime stage ===" && \
+    ls -laR /app/.cache/ && \
+    echo "=== Runtime cache verification complete ===" && \
+    stat /app/.cache && \
+    echo "=== Ownership check complete ==="
 
 # Copy application code
-COPY src/ ./src/
+COPY --chown=appuser:appuser src/ ./src/
 
-# Set environment variables
+# Set environment variables - Point to /app/.cache instead of /home/appuser/.cache
 ENV PATH=/home/appuser/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     MODEL_DEVICE=cpu \
-    LOG_LEVEL=INFO
-
-# Change ownership to non-root user
-RUN chown -R appuser:appuser /app
+    LOG_LEVEL=INFO \
+    HOME=/home/appuser \
+    TORCH_HOME=/app/.cache/torch \
+    XDG_CACHE_HOME=/app/.cache
 
 # Switch to non-root user
 USER appuser
+
+# Verify we can access the cache as appuser
+RUN echo "=== Testing cache access as appuser ===" && \
+    ls -la /app/.cache && \
+    echo "=== Cache access test complete ==="
 
 # Expose port
 EXPOSE 8000
