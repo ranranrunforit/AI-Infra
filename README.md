@@ -23,7 +23,7 @@ Flask, Docker, Kubernetes, MLflow, Prometheus, Grafana, CI/CD
 
 **[Model Serving System](./model_serving_system)**
 
-FastAPI, K8s, Monitoring
+FastAPI, Docker, Kubernetes, Prometheus, Grafana
 
 **[End-to-End MLOps Pipeline](./mlops_pipeline)**
 
