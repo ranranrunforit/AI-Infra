@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: airflow-webserver
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
   labels:
     app: airflow
     component: webserver
@@ -20,6 +21,7 @@ spec:
       containers:
       - name: webserver
         image: apache/airflow:2.7.3-python3.11
+        command: ["airflow", "webserver"]
         ports:
         - containerPort: 8080
           name: http
@@ -88,7 +90,7 @@ spec:
       containers:
       - name: scheduler
         image: apache/airflow:2.7.3-python3.11
-        command: ["airflow", "scheduler", "webserver"]  # <--- ADD THIS LINE
+        command: ["airflow", "scheduler"] 
         env:
         - name: AIRFLOW__CORE__EXECUTOR
           value: "CeleryExecutor"
