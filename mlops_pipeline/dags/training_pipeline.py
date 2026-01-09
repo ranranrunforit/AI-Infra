@@ -48,7 +48,7 @@ def training_pipeline():
         external_task_id=None,  # Wait for entire DAG
         timeout=600,
         allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
+        failed_states=['failed'], # Removed 'skipped'
         mode='reschedule',
     )
 
