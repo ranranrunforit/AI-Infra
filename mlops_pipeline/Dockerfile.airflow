@@ -1,6 +1,6 @@
 FROM apache/airflow:2.9.0-python3.11
 
-# Project 02: End-to-End MLOps Pipeline
+# Project End-to-End MLOps Pipeline
 # Airflow Docker image with custom dependencies
 
 USER root
