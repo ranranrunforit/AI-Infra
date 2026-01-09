@@ -27,7 +27,7 @@ FastAPI, Docker, Kubernetes, Prometheus, Grafana
 
 **[End-to-End MLOps Pipeline](./mlops_pipeline)**
 
-Airflow, MLflow, DVC
+Airflow, MLflow, DVC, Prometheus, Grafana, Docker, Kubernetes
 
 **[LLM Deployment Platform](./llm_deployment)**
 
