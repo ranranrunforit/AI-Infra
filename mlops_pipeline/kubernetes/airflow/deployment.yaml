@@ -88,7 +88,7 @@ spec:
       containers:
       - name: scheduler
         image: apache/airflow:2.7.3-python3.11
-        command: ["airflow", "scheduler"]
+        command: ["airflow", "scheduler", "webserver"]  # <--- ADD THIS LINE
         env:
         - name: AIRFLOW__CORE__EXECUTOR
           value: "CeleryExecutor"

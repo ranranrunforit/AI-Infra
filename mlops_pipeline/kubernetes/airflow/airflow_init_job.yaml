@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: airflow-init
+  namespace: ml-serving
+  labels:
+    app: airflow
+    component: init
+spec:
+  template:
+    metadata:
+      labels:
+        app: airflow
+        component: init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: airflow-init
+        image: apache/airflow:2.7.3-python3.11
+        command:
+          - /bin/bash
+          - -c
+          - |
+            set -e
+            echo "Initializing Airflow database..."
+            airflow db init
+            echo "Creating admin user..."
+            airflow users create \
+              --username admin \
+              --firstname Admin \
+              --lastname User \
+              --role Admin \
+              --email admin@example.com \
+              --password admin || echo "User already exists"
+            echo "Initialization complete!"
+        env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "CeleryExecutor"
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          value: "postgresql+psycopg2://airflow:airflow@postgres:5432/airflow"
+        - name: AIRFLOW__CELERY__BROKER_URL
+          value: "redis://:@redis:6379/0"
+        - name: AIRFLOW__CORE__LOAD_EXAMPLES
+          value: "false"
+        - name: AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION
+          value: "true"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
