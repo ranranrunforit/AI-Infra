@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mlflow
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
   labels:
     app: mlflow
 spec:

@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: model-config
-  namespace: default
+  namespace: ml-serving
   labels:
     app: mlops-model
     component: configuration
@@ -52,7 +52,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: default
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
 data:
   app.conf: |
     # Application configuration file
@@ -89,7 +89,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: env-config
-  namespace: default
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
 data:
   ENVIRONMENT: "production"
   REGION: "us-east-1"

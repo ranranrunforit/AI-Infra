@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
   labels:
     app: postgres
 spec:

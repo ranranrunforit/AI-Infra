@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 import pandas as pd
 import time
 
@@ -76,10 +77,11 @@ def data_pipeline():
             )
 
             logger.info(f"Data ingestion completed in {duration:.2f}s")
+            logger.info(f"Saved data to: {file_path}")
             return file_path
 
         except Exception as e:
-            logger.error(f"Data ingestion failed: {e}")
+            logger.error(f"Data ingestion failed: {e}", exc_info=True)
             metrics = MetricsCollector()
             metrics.record_pipeline_run(
                 pipeline_name='data_ingestion',
@@ -100,14 +102,15 @@ def data_pipeline():
             Validation report as dictionary
         """
         logger.info("Starting data validation")
+        logger.info(f"Validating file: {file_path}")
         start_time = time.time()
 
         try:
-            ingestor = DataIngestor()
             validator = DataValidator()
 
             # Load data
             df = pd.read_csv(file_path)
+            logger.info(f"Loaded {len(df)} rows for validation")
 
             # Validate
             report = validator.validate(df)
@@ -139,7 +142,7 @@ def data_pipeline():
             return report.to_dict()
 
         except Exception as e:
-            logger.error(f"Data validation failed: {e}")
+            logger.error(f"Data validation failed: {e}", exc_info=True)
             metrics = MetricsCollector()
             metrics.record_pipeline_run(
                 pipeline_name='data_validation',
@@ -161,6 +164,7 @@ def data_pipeline():
             Dictionary with paths to processed data files
         """
         logger.info("Starting data preprocessing")
+        logger.info(f"Processing file: {file_path}")
         start_time = time.time()
 
         try:
@@ -168,12 +172,15 @@ def data_pipeline():
 
             # Load data
             df = pd.read_csv(file_path)
+            logger.info(f"Loaded {len(df)} rows, {len(df.columns)} columns")
 
             # Preprocess
             X, y = preprocessor.preprocess(df, is_training=True)
+            logger.info(f"Preprocessed data - X shape: {X.shape}, y shape: {y.shape}")
 
             # Split data
             X_train, X_test, y_train, y_test = preprocessor.split_data(X, y)
+            logger.info(f"Split data - Train: {len(X_train)}, Test: {len(X_test)}")
 
             # Save processed data
             paths = preprocessor.save_processed_data(
@@ -183,6 +190,8 @@ def data_pipeline():
             # Save preprocessor
             preprocessor_path = preprocessor.save_preprocessor()
             paths['preprocessor'] = preprocessor_path
+
+            logger.info(f"Saved processed data to: {paths}")
 
             # Record metrics
             metrics = MetricsCollector()
@@ -206,7 +215,7 @@ def data_pipeline():
             return paths
 
         except Exception as e:
-            logger.error(f"Data preprocessing failed: {e}")
+            logger.error(f"Data preprocessing failed: {e}", exc_info=True)
             metrics = MetricsCollector()
             metrics.record_pipeline_run(
                 pipeline_name='data_preprocessing',
@@ -227,21 +236,20 @@ def data_pipeline():
             DVC commit hash
         """
         logger.info("Committing data to DVC")
+        logger.info(f"Paths to commit: {processed_paths}")
 
         try:
             # In a real implementation, this would use DVC Python API
             # For now, we'll simulate it
-            import subprocess
             import os
 
-            # Add files to DVC
+            # Verify files exist
             for key, path in processed_paths.items():
-                if key != 'preprocessor' and os.path.exists(path):
-                    logger.info(f"Adding {path} to DVC")
-                    # subprocess.run(['dvc', 'add', path], check=True)
-
-            # Push to remote
-            # subprocess.run(['dvc', 'push'], check=True)
+                if key != 'preprocessor':
+                    if os.path.exists(path):
+                        logger.info(f"Verified file exists: {path}")
+                    else:
+                        logger.warning(f"File not found: {path}")
 
             commit_hash = f"dvc_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             logger.info(f"Data committed to DVC: {commit_hash}")
@@ -249,14 +257,42 @@ def data_pipeline():
             return commit_hash
 
         except Exception as e:
-            logger.error(f"DVC commit failed: {e}")
+            logger.error(f"DVC commit failed: {e}", exc_info=True)
             raise
+
+    @task()
+    def notify_completion(dvc_commit: str) -> str:
+        """
+        Notify that data pipeline completed successfully.
+
+        Args:
+            dvc_commit: DVC commit hash
+
+        Returns:
+            Success message
+        """
+        logger.info("Data pipeline completed successfully")
+        logger.info(f"DVC commit: {dvc_commit}")
+        logger.info("Training pipeline will be triggered automatically")
+        return f"Data pipeline completed with DVC commit: {dvc_commit}"
 
     # Define task dependencies
     raw_data_path = ingest_data()
     validation_report = validate_data(raw_data_path)
     processed_paths = preprocess_data(raw_data_path, validation_report)
     dvc_commit = commit_to_dvc(processed_paths)
+    completion_msg = notify_completion(dvc_commit)
+
+    # Trigger training pipeline using TriggerDagRunOperator
+    trigger_training = TriggerDagRunOperator(
+        task_id='trigger_training_pipeline',
+        trigger_dag_id='training_pipeline',
+        wait_for_completion=False,
+        conf={'dvc_commit': '{{ ti.xcom_pull(task_ids="commit_to_dvc") }}'},
+    )
+
+    # Connect trigger to the completion notification
+    completion_msg >> trigger_training
 
 
 # Instantiate the DAG

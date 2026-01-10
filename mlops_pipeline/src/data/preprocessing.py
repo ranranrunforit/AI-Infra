@@ -57,12 +57,12 @@ class DataPreprocessor:
             target = None
             features = df
 
-        # Identify column types
+        # Engineer features FIRST (before identifying column types)
+        features = self._engineer_features(features)
+
+        # NOW identify column types (after feature engineering)
         if is_training:
             self._identify_column_types(features)
-
-        # Engineer features
-        features = self._engineer_features(features)
 
         # Encode categorical variables
         features = self._encode_categorical(features, is_training)
@@ -71,6 +71,7 @@ class DataPreprocessor:
         features = self._scale_numerical(features, is_training)
 
         logger.info(f"Preprocessing complete. Output shape: {features.shape}")
+        logger.info(f"Column dtypes after preprocessing:\n{features.dtypes}")
 
         return features, target
 
@@ -106,24 +107,26 @@ class DataPreprocessor:
             include=[np.number]
         ).columns.tolist()
 
-        logger.info(f"Identified {len(self.categorical_columns)} categorical columns")
+        logger.info(f"Identified {len(self.categorical_columns)} categorical columns: {self.categorical_columns}")
         logger.info(f"Identified {len(self.numerical_columns)} numerical columns")
 
     def _engineer_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Engineer new features from existing ones."""
         logger.info("Engineering features")
 
-        # Create tenure groups
+        # Create tenure groups - CONVERT TO STRING IMMEDIATELY
         if 'tenure' in df.columns:
             df['tenure_group'] = pd.cut(
                 df['tenure'],
                 bins=[0, 12, 24, 48, 72],
                 labels=['0-1yr', '1-2yr', '2-4yr', '4yr+']
-            )
+            ).astype(str)  # ← CRITICAL FIX: Convert to string
+            logger.info("Created tenure_group feature")
 
         # Create charge ratio feature
         if 'monthly_charges' in df.columns and 'total_charges' in df.columns:
             df['charge_ratio'] = df['monthly_charges'] / (df['total_charges'] + 1)
+            logger.info("Created charge_ratio feature")
 
         # Create service usage score
         service_cols = [
@@ -132,6 +135,7 @@ class DataPreprocessor:
         available_service_cols = [col for col in service_cols if col in df.columns]
         if available_service_cols:
             df['service_usage_score'] = df[available_service_cols].sum(axis=1)
+            logger.info("Created service_usage_score feature")
 
         return df
 
@@ -145,6 +149,7 @@ class DataPreprocessor:
 
         for col in self.categorical_columns:
             if col not in df.columns:
+                logger.warning(f"Column {col} not found in dataframe, skipping")
                 continue
 
             if is_training:
@@ -162,6 +167,8 @@ class DataPreprocessor:
                         lambda x: x if x in le.classes_ else le.classes_[0]
                     )
                     df[col] = le.transform(df[col])
+                else:
+                    logger.warning(f"No encoder found for {col}, skipping")
 
         return df
 
@@ -176,6 +183,7 @@ class DataPreprocessor:
         numerical_cols = [col for col in self.numerical_columns if col in df.columns]
 
         if not numerical_cols:
+            logger.warning("No numerical columns found to scale")
             return df
 
         if is_training:
@@ -273,5 +281,10 @@ class DataPreprocessor:
         y_test.to_csv(paths['y_test'], index=False, header=['Churn'])
 
         logger.info(f"Saved processed data to {self.processed_data_path}")
+
+        # Log data types to verify everything is numeric
+        logger.info("Data types in saved X_train:")
+        for col in X_train.columns:
+            logger.info(f"  {col}: {X_train[col].dtype}")
 
         return {k: str(v) for k, v in paths.items()}

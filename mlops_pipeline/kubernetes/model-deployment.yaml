@@ -6,7 +6,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mlops-model-deployment
-  namespace: default
+  namespace: ml-serving
   labels:
     app: mlops-model
     component: model-server
@@ -51,8 +51,9 @@ spec:
       containers:
       - name: model-server
         # TODO: Replace with actual image from deployment pipeline
-        image: localhost:5000/mlops-model-server:latest
-        imagePullPolicy: Always
+        image: model-serving-api:latest
+        # tells K8s "Use the image I built locally, don't download it"
+        imagePullPolicy: IfNotPresent
 
         ports:
         - name: http
@@ -146,7 +147,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: mlops-model-hpa
-  namespace: default
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -204,7 +205,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: mlops-model-pdb
-  namespace: default
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
 spec:
   minAvailable: 2  # Always keep at least 2 pods running
   selector:

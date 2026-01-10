@@ -4,7 +4,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mlops-model-service
-  namespace: default
+  namespace: ml-serving
   labels:
     app: mlops-model
     component: model-server
@@ -37,7 +37,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: mlops-model-ingress
-  namespace: default
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
   labels:
     app: mlops-model
   annotations:
@@ -71,7 +71,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mlops-model-headless
-  namespace: default
+  namespace: ml-serving        # <--- ADD THIS (Lines 5)
   labels:
     app: mlops-model
     component: model-server

@@ -19,28 +19,35 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # Airflow metrics
-  - job_name: 'airflow'
+  # 2. YOUR MODEL SERVER (New!)
+  # Assumes your service is in the 'ml-serving' namespace
+  - job_name: 'model-server'
+    metrics_path: /metrics
     static_configs:
-      - targets: ['airflow-webserver:8080']
-    metrics_path: '/metrics'
+      - targets: ['mlops-model-service:8000']
 
-  # MLflow metrics (if exposed)
-  - job_name: 'mlflow'
-    static_configs:
-      - targets: ['mlflow:5000']
-    metrics_path: '/metrics'
+  # # Airflow metrics
+  # - job_name: 'airflow'
+  #   static_configs:
+  #     - targets: ['airflow-webserver:8080']
+  #   metrics_path: '/metrics'
+
+  # # MLflow metrics (if exposed)
+  # - job_name: 'mlflow'
+  #   static_configs:
+  #     - targets: ['mlflow:5000']
+  #   metrics_path: '/metrics'
 
   # Pushgateway for batch jobs
   - job_name: 'pushgateway'
     honor_labels: true
     static_configs:
-      - targets: ['pushgateway:9091']
+      - targets: ['prometheus-prometheus-pushgateway:9091']
 
   # Node exporter for system metrics
   - job_name: 'node'
     static_configs:
-      - targets: ['node-exporter:9100']
+      - targets: ['prometheus-prometheus-node-exporter:9100']
 
   # Kubernetes metrics
   - job_name: 'kubernetes-pods'

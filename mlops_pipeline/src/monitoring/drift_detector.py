@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any, Tuple
 from scipy import stats
-from sklearn.metrics import jensen_shannon_distance
+from scipy.spatial.distance import jensenshannon
 
 from ..common.config import config
 from ..common.logger import get_logger
@@ -151,7 +151,7 @@ class DriftDetector:
             curr_dist = np.pad(curr_dist, (0, max_len - len(curr_dist)))
 
             # Calculate divergence
-            drift_score = jensen_shannon_distance(ref_dist, curr_dist)
+            drift_score = jensenshannon(ref_dist, curr_dist)
         else:
             # For continuous predictions, use KS test
             statistic, p_value = stats.ks_2samp(
@@ -251,7 +251,7 @@ class DriftDetector:
             ref_dist = ref_freq.reindex(all_categories, fill_value=1e-10)
             curr_dist = curr_freq.reindex(all_categories, fill_value=1e-10)
 
-            return jensen_shannon_distance(ref_dist, curr_dist)
+            return jensenshannon(ref_dist, curr_dist)
         else:
             # For numerical
             min_val = min(reference.min(), current.min())
@@ -269,7 +269,7 @@ class DriftDetector:
             ref_hist = ref_hist + 1e-10
             curr_hist = curr_hist + 1e-10
 
-            return jensen_shannon_distance(ref_hist, curr_hist)
+            return jensenshannon(ref_hist, curr_hist)
 
     def monitor_drift(
         self,

@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Upgrade pip to the latest version to use the improved dependency resolver
+RUN pip install --upgrade pip
+
+# Install requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy your source code (assuming it's in 'src')
+COPY src/ ./src/
+
+# Set the python path so it can find your modules
+ENV PYTHONPATH=/app/src
+
+# Expose the API port
+EXPOSE 8000
+
+# Start the server (Adjust 'src.deployment.api:app' to match your actual FastAPI file location!)
+# If you don't have an API file yet, this will fail to start.
+# For now, we can use a placeholder command to keep the pod alive:
+CMD ["python", "-m", "uvicorn", "src.deployment.deployer:app", "--host", "0.0.0.0", "--port", "8000"]
