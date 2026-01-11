@@ -52,8 +52,7 @@ spec:
       - name: model-server
         # TODO: Replace with actual image from deployment pipeline
         image: model-serving-api:latest
-        # tells K8s "Use the image I built locally, don't download it"
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Never
 
         ports:
         - name: http

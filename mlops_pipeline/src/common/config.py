@@ -5,6 +5,39 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+def _safe_int_env(var_name: str, default: str) -> int:
+    """Safely parse integer from environment variable, handling Kubernetes format."""
+    value = os.getenv(var_name, default)
+    
+    # Handle Kubernetes format: tcp://host:port
+    if isinstance(value, str) and value.startswith('tcp://'):
+        # Extract port from tcp://host:port format
+        try:
+            port = value.split(':')[-1]
+            return int(port)
+        except (ValueError, IndexError):
+            return int(default)
+    
+    return int(value)
+
+
+def _safe_str_env(var_name: str, default: str) -> str:
+    """Safely get string from environment variable, handling Kubernetes format."""
+    value = os.getenv(var_name, default)
+    
+    # Handle Kubernetes format: tcp://host:port
+    if isinstance(value, str) and value.startswith('tcp://'):
+        # For host, extract the hostname part
+        if 'HOST' in var_name:
+            try:
+                # tcp://10.105.242.98:5432 -> 10.105.242.98
+                return value.split('//')[1].split(':')[0]
+            except (ValueError, IndexError):
+                return default
+    
+    return value
+
+
 @dataclass
 class Config:
     """Central configuration for all pipeline components."""
@@ -33,8 +66,12 @@ class Config:
     S3_BUCKET: str = os.getenv('S3_BUCKET', 'mlops-data')
 
     # Database configuration
-    POSTGRES_HOST: str = os.getenv('POSTGRES_HOST', 'postgres')
-    POSTGRES_PORT: int = int(os.getenv('POSTGRES_PORT', '5432'))
+    # POSTGRES_HOST: str = os.getenv('POSTGRES_HOST', 'postgres')
+    # POSTGRES_PORT: int = int(os.getenv('POSTGRES_PORT', '5432'))
+
+    # Database configuration - using safe parsing functions
+    POSTGRES_HOST: str = _safe_str_env('POSTGRES_HOST', 'postgres')
+    POSTGRES_PORT: int = _safe_int_env('POSTGRES_PORT', '5432')
     POSTGRES_DB: str = os.getenv('POSTGRES_DB', 'mlflow')
     POSTGRES_USER: str = os.getenv('POSTGRES_USER', 'mlflow')
     POSTGRES_PASSWORD: str = os.getenv('POSTGRES_PASSWORD', 'mlflow')
