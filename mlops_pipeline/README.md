@@ -490,6 +490,15 @@ kubectl apply -f kubernetes/model-deployment.yaml
 
 # model-server
 
+# Verify the Switch 
+docker images.
+# If you see a lot of "k8s.gcr.io" images, it worked.
+# If you only see your own local images, it failed. Stop here.
+
+# Build the Image (Again) 
+Since we are now "inside" Minikube, building here saves it where Kubernetes can instantly see it.
+docker build --no-cache -f Dockerfile.model -t model-serving-api:latest .
+
 # Delete the Broken Pods 
 # Now that the image is definitely there, kill the stuck pods to force a restart.
 kubectl delete pod -n ml-serving -l component=model-server
