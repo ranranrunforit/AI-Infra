@@ -1,4 +1,4 @@
-# Project 02: End-to-End MLOps Pipeline
+# Project 07: End-to-End MLOps Pipeline
 
 A complete, production-ready MLOps pipeline demonstrating modern machine learning operations practices with automated training, experiment tracking, model registry, and continuous deployment.
 
@@ -553,27 +553,3 @@ docker-compose logs -f [service-name]
 - Kubernetes RBAC
 - Secrets management via K8s secrets
 - Network policies for pod communication
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Write tests for new features
-4. Ensure all tests pass
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file
-
-## Contact
-
-For questions or issues, please open a GitHub issue.
-
-## Acknowledgments
-
-Built with modern MLOps best practices and tools from the open-source community.
-
----
-
-**Generated with Claude Code** - AI Infrastructure Engineer Solutions
