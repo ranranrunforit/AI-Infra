@@ -427,6 +427,23 @@ kubectl logs -n ml-serving airflow-scheduler-84d7c8545-c4x5d --tail=100
 # If the pod has restarted, check previous logs
 kubectl logs -n ml-serving airflow-scheduler-84d7c8545-c4x5d --previous --tail=100
 
+# Delete the old deployments
+# Delete everything Airflow-related
+kubectl delete deployment airflow-scheduler airflow-webserver -n ml-serving
+kubectl delete job airflow-copy-dags -n ml-serving
+
+# Apply the fixed version
+kubectl apply -f kubernetes/airflow/deployment.yaml
+
+# Watch pods come up
+kubectl get pods -n ml-serving -w
+
+# Verify it's working
+# Check scheduler logs (should be clean now)
+kubectl logs -n ml-serving -l component=scheduler -f
+
+# Check webserver logs
+kubectl logs -n ml-serving -l component=webserver -f
 ```
 
 
