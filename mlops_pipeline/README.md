@@ -609,8 +609,7 @@ docker-compose logs -f [service-name]
 - [Pipeline Documentation](docs/PIPELINE.md) - Detailed pipeline workflows
 - [MLflow Guide](docs/MLFLOW.md) - Experiment tracking and registry
 - [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment
-- [DVC Guide](docs/DVC.md) - Data versioning workflow
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues
+
 
 ## Performance
 
