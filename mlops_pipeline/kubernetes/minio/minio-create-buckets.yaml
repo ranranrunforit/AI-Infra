@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-create-buckets
+  namespace: ml-serving
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: mc
+        image: minio/mc:latest
+        command:
+          - /bin/sh
+          - -c
+          - |
+            sleep 10
+            mc alias set myminio http://minio:9000 minioadmin minioadmin
+            mc mb myminio/mlops-data --ignore-existing
+            mc mb myminio/mlflow-artifacts --ignore-existing
+            mc mb myminio/dvc-storage --ignore-existing
+            mc anonymous set download myminio/mlops-data
+            mc anonymous set download myminio/mlflow-artifacts
+            mc anonymous set download myminio/dvc-storage
+            echo "Buckets created successfully!"

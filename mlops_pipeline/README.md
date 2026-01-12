@@ -1,4 +1,4 @@
-# Project 07: End-to-End MLOps Pipeline
+# Project 02: End-to-End MLOps Pipeline
 
 A complete, production-ready MLOps pipeline demonstrating modern machine learning operations practices with automated training, experiment tracking, model registry, and continuous deployment.
 
@@ -293,11 +293,97 @@ make docker-down
 
 ## Deployment
 
+### Docker Deployment
+
+```bash
+
+# Start Minikube with sufficient resources
+minikube start --cpus=4 --memory=8192 --driver=docker
+# Or
+minikube start --cpus=4 --memory=8192 --disk-size=20g
+
+# Enable required addons
+minikube addons enable metrics-server
+minikube addons enable ingress
+
+# Build and Load Images (The "Minikube Dance")
+
+# 1. Build and Load Airflow:
+
+docker build -f Dockerfile -t mlops-airflow:latest .
+minikube image load mlops-airflow:latest
+
+# 2. Build and Load MLflow:
+
+docker build -f docker/Dockerfile.mlflow -t mlops-mlflow:latest .
+minikube image load mlops-mlflow:latest
+
+# 3. Build and Load Model Server:
+
+docker build -f Dockerfile.model -t model-serving-api:latest .
+minikube image load model-serving-api:latest
+
+```
+
 ### Kubernetes Deployment
 
 ```bash
 # Deploy to Kubernetes
 ./scripts/deploy.sh
+
+
+# 1. Clean up existing deployment (if any)
+# Delete the namespace (this removes everything)
+kubectl delete namespace ml-serving
+# Wait a moment for cleanup
+Start-Sleep -Seconds 10
+
+# 2. Create namespace
+kubectl create namespace ml-serving
+
+# 3. Deploy in the correct order
+# Deploy infrastructure first (order matters!)
+kubectl apply -f kubernetes/postgres/deployment.yaml
+kubectl apply -f kubernetes/redis/deployment.yaml
+kubectl apply -f kubernetes/minio/deployment.yaml
+
+# Wait for infrastructure to be ready
+kubectl wait --for=condition=ready pod -l app=postgres -n ml-serving --timeout=300s
+kubectl wait --for=condition=ready pod -l app=redis -n ml-serving --timeout=300s
+kubectl wait --for=condition=ready pod -l app=minio -n ml-serving --timeout=300s
+
+# Deploy MLflow
+kubectl apply -f kubernetes/mlflow/deployment.yaml
+kubectl wait --for=condition=ready pod -l app=mlflow -n ml-serving --timeout=300s
+
+# Deploy Airflow (optional, if you need it)
+kubectl apply -f kubernetes/airflow/
+
+# Deploy ConfigMaps
+kubectl apply -f kubernetes/configmap.yaml
+
+# Finally deploy your model
+kubectl apply -f kubernetes/model-deployment.yaml
+kubectl apply -f kubernetes/service.yaml
+
+# 4. Monitor the deployment
+# Watch pods come up
+kubectl get pods -n ml-serving -w
+
+# In another terminal, check logs
+kubectl logs -n ml-serving -l app=mlops-model -f
+
+# 5. Verify everything is working
+# Check all resources
+kubectl get all -n ml-serving
+
+# Check if MLflow is accessible
+kubectl run -n ml-serving curl-test --image=curlimages/curl --rm -it --restart=Never -- curl http://mlflow:5000/health
+
+# Check model pod logs
+kubectl logs -n ml-serving -l app=mlops-model --tail=50
+
+
 
 # Or using kubectl
 kubectl apply -f kubernetes/
@@ -305,7 +391,44 @@ kubectl apply -f kubernetes/
 # Check status
 kubectl get pods -n ml-serving
 kubectl get services -n ml-serving
+
+
+# Verification
+# Check all pods
+kubectl get pods -n ml-serving
+
+# Check MLflow logs
+kubectl logs -n ml-serving -l app=mlflow --tail=50
+
+# Check Airflow scheduler logs (this loads DAGs)
+kubectl logs -n ml-serving -l component=scheduler --tail=50
+
+# Check DAGs (should show your 3 DAGs)
+kubectl port-forward -n ml-serving svc/airflow-webserver 8080:8080
+# Open http://localhost:8080 (admin/admin)
+
+# Check MLflow
+kubectl port-forward -n ml-serving svc/mlflow 5000:5000
+# Open http://localhost:5000
+
+# Check MinIO
+kubectl port-forward -n ml-serving svc/minio 9001:9001
+# Open http://localhost:9001 (minioadmin/minioadmin)
+
 ```
+
+
+### Debug
+
+```bash
+# Check scheduler logs
+kubectl logs -n ml-serving airflow-scheduler-84d7c8545-c4x5d --tail=100
+
+# If the pod has restarted, check previous logs
+kubectl logs -n ml-serving airflow-scheduler-84d7c8545-c4x5d --previous --tail=100
+
+```
+
 
 ### Model Promotion
 
@@ -378,6 +501,24 @@ DRIFT_THRESHOLD=0.1
 3. **Adjust Thresholds**: Update `.env` file
 4. **Custom Metrics**: Add to `src/monitoring/metrics_collector.py`
 
+## Troubleshooting
+
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues and solutions.
+
+Quick fixes:
+```bash
+# Reset everything
+make docker-down
+make clean
+make docker-build
+make docker-up
+
+# Check service health
+make check-status
+
+# View logs
+docker-compose logs -f [service-name]
+```
 
 ## Documentation
 
@@ -385,7 +526,8 @@ DRIFT_THRESHOLD=0.1
 - [Pipeline Documentation](docs/PIPELINE.md) - Detailed pipeline workflows
 - [MLflow Guide](docs/MLFLOW.md) - Experiment tracking and registry
 - [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment
-
+- [DVC Guide](docs/DVC.md) - Data versioning workflow
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues
 
 ## Performance
 
@@ -412,4 +554,26 @@ DRIFT_THRESHOLD=0.1
 - Secrets management via K8s secrets
 - Network policies for pod communication
 
+## Contributing
 
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new features
+4. Ensure all tests pass
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file
+
+## Contact
+
+For questions or issues, please open a GitHub issue.
+
+## Acknowledgments
+
+Built with modern MLOps best practices and tools from the open-source community.
+
+---
+
+**Generated with Claude Code** - AI Infrastructure Engineer Solutions

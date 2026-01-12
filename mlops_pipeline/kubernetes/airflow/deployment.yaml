@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: airflow-webserver
-  namespace: ml-serving        # <--- ADD THIS (Lines 5)
+  namespace: ml-serving
   labels:
     app: airflow
     component: webserver
@@ -18,9 +18,14 @@ spec:
         app: airflow
         component: webserver
     spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:latest
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
       containers:
       - name: webserver
-        image: apache/airflow:2.7.3-python3.11
+        image: apache/airflow:2.9.0-python3.11
+        imagePullPolicy: IfNotPresent
         command: ["airflow", "webserver"]
         ports:
         - containerPort: 8080
@@ -32,6 +37,10 @@ spec:
           value: "postgresql+psycopg2://airflow:airflow@postgres:5432/airflow"
         - name: AIRFLOW__CELERY__BROKER_URL
           value: "redis://:@redis:6379/0"
+        - name: AIRFLOW__CORE__LOAD_EXAMPLES
+          value: "False"
+        - name: AIRFLOW__CORE__DAGS_FOLDER
+          value: "/opt/airflow/dags"
         - name: MLFLOW_TRACKING_URI
           value: "http://mlflow:5000"
         volumeMounts:
@@ -48,8 +57,7 @@ spec:
             cpu: "1000m"
       volumes:
       - name: dags
-        persistentVolumeClaim:
-          claimName: airflow-dags-pvc
+        emptyDir: {}  # <--- This fixes the symlink issue
       - name: logs
         persistentVolumeClaim:
           claimName: airflow-logs-pvc
@@ -58,7 +66,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: airflow-webserver
-  namespace: ml-serving  # <--- ADDED
+  namespace: ml-serving
 spec:
   type: LoadBalancer
   ports:
@@ -73,7 +81,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: airflow-scheduler
-  namespace: ml-serving  # <--- ADDED
+  namespace: ml-serving
   labels:
     app: airflow
     component: scheduler
@@ -89,9 +97,14 @@ spec:
         app: airflow
         component: scheduler
     spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:latest
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
       containers:
       - name: scheduler
-        image: apache/airflow:2.7.3-python3.11
+        image: apache/airflow:2.9.0-python3.11
+        imagePullPolicy: IfNotPresent
         command: ["airflow", "scheduler"] 
         env:
         - name: AIRFLOW__CORE__EXECUTOR
@@ -100,6 +113,10 @@ spec:
           value: "postgresql+psycopg2://airflow:airflow@postgres:5432/airflow"
         - name: AIRFLOW__CELERY__BROKER_URL
           value: "redis://:@redis:6379/0"
+        - name: AIRFLOW__CORE__LOAD_EXAMPLES
+          value: "False"
+        - name: AIRFLOW__CORE__DAGS_FOLDER
+          value: "/opt/airflow/dags"
         - name: MLFLOW_TRACKING_URI
           value: "http://mlflow:5000"
         volumeMounts:
@@ -116,8 +133,7 @@ spec:
             cpu: "1000m"
       volumes:
       - name: dags
-        persistentVolumeClaim:
-          claimName: airflow-dags-pvc
+        emptyDir: {}  # <--- This fixes the symlink issue
       - name: logs
         persistentVolumeClaim:
           claimName: airflow-logs-pvc
@@ -125,21 +141,10 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: airflow-dags-pvc
-  namespace: ml-serving  # <--- ADDED
-spec:
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 5Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
   name: airflow-logs-pvc
-  namespace: ml-serving  # <--- ADDED
+  namespace: ml-serving
 spec:
+  storageClassName: standard
   accessModes:
     - ReadWriteMany
   resources:

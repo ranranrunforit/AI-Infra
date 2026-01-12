@@ -16,7 +16,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: airflow-init
-        image: apache/airflow:2.7.3-python3.11
+        image: apache/airflow:2.9.0-python3.11
         command:
           - /bin/bash
           - -c
@@ -51,3 +51,41 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: airflow-copy-dags
+  namespace: ml-serving
+spec:
+  template:
+    metadata:
+      labels:
+        app: airflow
+        component: dags-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: copy-dags
+        image: busybox:latest
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "Copying DAG files..."
+            # Create necessary directories
+            mkdir -p /opt/airflow/dags
+            mkdir -p /opt/airflow/data/raw
+            mkdir -p /opt/airflow/data/processed
+            mkdir -p /opt/airflow/models
+            
+            # Copy DAG files (you'll need to mount them via ConfigMap)
+            echo "DAGs directory created"
+            ls -la /opt/airflow/dags/
+        volumeMounts:
+        - name: dags
+          mountPath: /opt/airflow/dags
+      volumes:
+      - name: dags
+        persistentVolumeClaim:
+          claimName: airflow-dags-pvc
