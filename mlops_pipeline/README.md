@@ -455,6 +455,25 @@ kubectl logs -n ml-serving -l component=webserver -f
 
 
 
+# Delete the old init job:
+kubectl delete job airflow-init -n ml-serving
+kubectl delete job airflow-copy-dags -n ml-serving
+
+# Ensure your image is loaded in Minikube:
+docker build -f Dockerfile.airflow -t custom-airflow:2.9.0 .
+minikube image load custom-airflow:2.9.0
+
+# Apply the new configuration:
+kubectl apply -f airflow_init_job.yaml
+kubectl apply -f deployment.yaml
+
+# Restart the pods (Critical):
+kubectl delete pods -n ml-serving -l app=airflow
+# Once the new pods come up, check with 
+kubectl get pods -n ml-serving
+
+
+
 
 
 # mlops-model-deployment
