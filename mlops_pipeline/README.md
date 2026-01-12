@@ -470,6 +470,35 @@ kubectl logs -n ml-serving -l component=scheduler -f
 
 # Check webserver logs
 kubectl logs -n ml-serving -l component=webserver -f
+
+
+
+
+# mlops-model-deployment
+
+# force Kubernetes to restart the pod and pick up the new code:
+kubectl rollout restart deployment mlops-model-deployment -n ml-serving
+# Wait 30 seconds and check:
+kubectl logs -n ml-serving -l component=model-server
+
+# Delete the old deployment
+kubectl delete deployment mlops-model-deployment -n ml-serving
+# Re-apply it
+kubectl apply -f kubernetes/model-deployment.yaml
+
+
+
+# model-server
+
+# Delete the Broken Pods 
+# Now that the image is definitely there, kill the stuck pods to force a restart.
+kubectl delete pod -n ml-serving -l component=model-server
+
+# Check Logs Correctly
+# Since the pod names keep changing, stop copy-pasting the random names. 
+# Use this "Label Selector" command instead. 
+# It automatically finds the right pod for you:
+kubectl logs -n ml-serving -l component=model-server -f
 ```
 
 
