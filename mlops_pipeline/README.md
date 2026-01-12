@@ -393,7 +393,9 @@ kubectl get pods -n ml-serving
 kubectl get services -n ml-serving
 
 
+
 # Verification
+
 # Check all pods
 kubectl get pods -n ml-serving
 
@@ -421,11 +423,34 @@ kubectl port-forward -n ml-serving svc/minio 9001:9001
 ### Debug
 
 ```bash
+# airflow
+
 # Check scheduler logs
 kubectl logs -n ml-serving airflow-scheduler-84d7c8545-c4x5d --tail=100
 
 # If the pod has restarted, check previous logs
 kubectl logs -n ml-serving airflow-scheduler-84d7c8545-c4x5d --previous --tail=100
+
+# Apply the Fix
+# Delete the crashing pods
+kubectl delete deployment airflow-scheduler airflow-webserver -n ml-serving
+
+# Wait a moment
+Start-Sleep -Seconds 5
+
+# Apply the fixed deployment
+kubectl apply -f kubernetes/airflow/deployment.yaml
+
+# Watch it come up
+kubectl get pods -n ml-serving -w
+
+# Monitor the Fix
+# Watch scheduler logs in real-time
+kubectl logs -n ml-serving -l component=scheduler -f
+
+# In another terminal, watch webserver
+kubectl logs -n ml-serving -l component=webserver -f
+
 
 # Delete the old deployments
 # Delete everything Airflow-related
@@ -439,6 +464,7 @@ kubectl apply -f kubernetes/airflow/deployment.yaml
 kubectl get pods -n ml-serving -w
 
 # Verify it's working
+
 # Check scheduler logs (should be clean now)
 kubectl logs -n ml-serving -l component=scheduler -f
 
