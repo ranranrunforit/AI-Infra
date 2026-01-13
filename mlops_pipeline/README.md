@@ -393,9 +393,7 @@ kubectl get pods -n ml-serving
 kubectl get services -n ml-serving
 
 
-
 # Verification
-
 # Check all pods
 kubectl get pods -n ml-serving
 
@@ -475,7 +473,6 @@ kubectl get pods -n ml-serving
 
 
 
-
 # mlops-model-deployment
 
 # force Kubernetes to restart the pod and pick up the new code:
@@ -498,7 +495,7 @@ docker images.
 # If you only see your own local images, it failed. Stop here.
 
 # Build the Image (Again) 
-Since we are now "inside" Minikube, building here saves it where Kubernetes can instantly see it.
+# Since we are now "inside" Minikube, building here saves it where Kubernetes can instantly see it.
 docker build --no-cache -f Dockerfile.model -t model-serving-api:latest .
 
 # Delete the Broken Pods 
