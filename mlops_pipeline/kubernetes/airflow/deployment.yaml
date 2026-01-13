@@ -24,8 +24,8 @@ spec:
         command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
       containers:
       - name: webserver
-        image: apache/airflow:2.9.0-python3.11
-        imagePullPolicy: IfNotPresent
+        image: custom-airflow:2.9.0  # apache/airflow:2.9.0-python3.11
+        imagePullPolicy: Never
         command: ["airflow", "webserver"]
         ports:
         - containerPort: 8080
@@ -43,9 +43,15 @@ spec:
           value: "/opt/airflow/dags"
         - name: MLFLOW_TRACKING_URI
           value: "http://mlflow:5000"
+        # ADD THESE LINES:
+        - name: AIRFLOW__CORE__PARALLELISM
+          value: "2"  # Only allow 2 tasks across the whole system
+        - name: AIRFLOW__CORE__DAG_CONCURRENCY
+          value: "2"  # Only allow 2 tasks per DAG
+        - name: AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG
+          value: "1"  # Only allow 1 active DAG run at a time
         volumeMounts:
-        - name: dags
-          mountPath: /opt/airflow/dags
+        # ONLY 'logs' should be here. 'dags' must be gone.
         - name: logs
           mountPath: /opt/airflow/logs
         resources:
@@ -53,11 +59,10 @@ spec:
             memory: "1Gi"
             cpu: "500m"
           limits:
-            memory: "2Gi"
+            memory: "4Gi"
             cpu: "1000m"
       volumes:
-      - name: dags
-        emptyDir: {}  # <--- This fixes the symlink issue
+      # ONLY 'logs' should be here. 'dags' must be gone.
       - name: logs
         persistentVolumeClaim:
           claimName: airflow-logs-pvc
@@ -103,8 +108,8 @@ spec:
         command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
       containers:
       - name: scheduler
-        image: apache/airflow:2.9.0-python3.11
-        imagePullPolicy: IfNotPresent
+        image: custom-airflow:2.9.0  # apache/airflow:2.9.0-python3.11
+        imagePullPolicy: Never
         command: ["airflow", "scheduler"] 
         env:
         - name: AIRFLOW__CORE__EXECUTOR
@@ -119,9 +124,15 @@ spec:
           value: "/opt/airflow/dags"
         - name: MLFLOW_TRACKING_URI
           value: "http://mlflow:5000"
+        # ADD THESE LINES:
+        - name: AIRFLOW__CORE__PARALLELISM
+          value: "2"  # Only allow 2 tasks across the whole system
+        - name: AIRFLOW__CORE__DAG_CONCURRENCY
+          value: "2"  # Only allow 2 tasks per DAG
+        - name: AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG
+          value: "1"  # Only allow 1 active DAG run at a time
         volumeMounts:
-        - name: dags
-          mountPath: /opt/airflow/dags
+        # ONLY 'logs' should be here.
         - name: logs
           mountPath: /opt/airflow/logs
         resources:
@@ -129,11 +140,10 @@ spec:
             memory: "1Gi"
             cpu: "500m"
           limits:
-            memory: "2Gi"
+            memory: "4Gi"
             cpu: "1000m"
       volumes:
-      - name: dags
-        emptyDir: {}  # <--- This fixes the symlink issue
+      # ONLY 'logs' should be here.
       - name: logs
         persistentVolumeClaim:
           claimName: airflow-logs-pvc
@@ -150,3 +160,81 @@ spec:
   resources:
     requests:
       storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-worker
+  namespace: ml-serving
+  labels:
+    app: airflow
+    component: worker
+spec:
+  replicas: 1  # Can scale up if needed
+  selector:
+    matchLabels:
+      app: airflow
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: airflow
+        component: worker
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:latest
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
+      - name: wait-for-redis
+        image: busybox:latest
+        command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done;']
+      containers:
+      - name: worker
+        image: custom-airflow:2.9.0
+        imagePullPolicy: Never
+        command: ["airflow", "celery", "worker"]
+        env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "CeleryExecutor"
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          value: "postgresql+psycopg2://airflow:airflow@postgres:5432/airflow"
+        - name: AIRFLOW__CELERY__BROKER_URL
+          value: "redis://:@redis:6379/0"
+        - name: AIRFLOW__CELERY__RESULT_BACKEND
+          value: "db+postgresql://airflow:airflow@postgres:5432/airflow"
+        - name: AIRFLOW__CORE__LOAD_EXAMPLES
+          value: "False"
+        - name: AIRFLOW__CORE__DAGS_FOLDER
+          value: "/opt/airflow/dags"
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow:5000"
+        - name: AIRFLOW__CORE__PARALLELISM
+          value: "2"
+        - name: AIRFLOW__CORE__DAG_CONCURRENCY
+          value: "2"
+        - name: AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG
+          value: "1"
+        - name: AWS_ACCESS_KEY_ID
+          value: "minioadmin"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "minioadmin"
+        - name: AWS_ENDPOINT_URL
+          value: "http://minio:9000"
+        volumeMounts:
+        - name: logs
+          mountPath: /opt/airflow/logs
+        - name: data
+          mountPath: /opt/airflow/data
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "3Gi"
+            cpu: "1000m"
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: airflow-logs-pvc
+      - name: data
+        emptyDir: {}

@@ -16,7 +16,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: airflow-init
-        image: apache/airflow:2.9.0-python3.11
+        image: custom-airflow:2.9.0  # apache/airflow:2.9.0-python3.11
         command:
           - /bin/bash
           - -c
