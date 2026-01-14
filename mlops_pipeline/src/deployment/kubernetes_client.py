@@ -70,30 +70,21 @@ class KubernetesClient:
     ) -> bool:
         """
         Update deployment with new image.
-
-        Args:
-            name: Deployment name
-            image: New container image
-            container_name: Container name (defaults to first container)
-
-        Returns:
-            True if successful, False otherwise
+        Creates deployment if it doesn't exist.
         """
         logger.info(f"Updating deployment {name} with image {image}")
 
         try:
-            # Get current deployment
+            # Try to get existing deployment
             deployment = self.apps_v1.read_namespaced_deployment(
                 name=name,
                 namespace=self.namespace
             )
-
+            
             # Update image
             if container_name is None:
-                # Update first container
                 deployment.spec.template.spec.containers[0].image = image
             else:
-                # Find and update specific container
                 for container in deployment.spec.template.spec.containers:
                     if container.name == container_name:
                         container.image = image
@@ -105,12 +96,82 @@ class KubernetesClient:
                 namespace=self.namespace,
                 body=deployment
             )
-
+            
             logger.info(f"Successfully updated deployment {name}")
             return True
 
         except ApiException as e:
-            logger.error(f"Failed to update deployment: {e}")
+            if e.status == 404:
+                # Deployment doesn't exist, create it
+                logger.info(f"Deployment {name} not found, creating new deployment")
+                return self._create_deployment(name, image, container_name)
+            else:
+                logger.error(f"Failed to update deployment: {e}")
+                return False
+
+    def _create_deployment(
+        self,
+        name: str,
+        image: str,
+        container_name: Optional[str] = None
+    ) -> bool:
+        """Create a new deployment."""
+        from kubernetes.client import V1Deployment, V1DeploymentSpec, V1PodTemplateSpec
+        from kubernetes.client import V1ObjectMeta, V1PodSpec, V1Container, V1ContainerPort
+        from kubernetes.client import V1LabelSelector, V1ResourceRequirements
+        
+        if container_name is None:
+            container_name = "model-server"
+        
+        # Define container
+        container = V1Container(
+            name=container_name,
+            image=image,
+            ports=[V1ContainerPort(container_port=8000, name="http")],
+            env=[
+                {"name": "MLFLOW_TRACKING_URI", "value": "http://mlflow:5000"},
+                {"name": "MODEL_NAME", "value": config.MODEL_NAME},
+                {"name": "MODEL_VERSION", "value": "Production"}
+            ],
+            resources=V1ResourceRequirements(
+                requests={"memory": "512Mi", "cpu": "500m"},
+                limits={"memory": "1Gi", "cpu": "1000m"}
+            )
+        )
+        
+        # Define deployment
+        deployment = V1Deployment(
+            api_version="apps/v1",
+            kind="Deployment",
+            metadata=V1ObjectMeta(
+                name=name,
+                labels={"app": name}
+            ),
+            spec=V1DeploymentSpec(
+                replicas=2,
+                selector=V1LabelSelector(
+                    match_labels={"app": name}
+                ),
+                template=V1PodTemplateSpec(
+                    metadata=V1ObjectMeta(
+                        labels={"app": name}
+                    ),
+                    spec=V1PodSpec(
+                        containers=[container]
+                    )
+                )
+            )
+        )
+        
+        try:
+            self.apps_v1.create_namespaced_deployment(
+                namespace=self.namespace,
+                body=deployment
+            )
+            logger.info(f"Successfully created deployment {name}")
+            return True
+        except ApiException as e:
+            logger.error(f"Failed to create deployment: {e}")
             return False
 
     def wait_for_deployment_rollout(
