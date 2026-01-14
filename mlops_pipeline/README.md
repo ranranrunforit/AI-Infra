@@ -421,6 +421,162 @@ kubectl port-forward -n ml-serving svc/minio 9001:9001
 ### Debug
 
 ```bash
+# Lint
+make lint
+
+# Format
+make format
+
+# Type checking
+mypy src
+```
+
+### Local Development
+
+```bash
+# Install dependencies
+make install
+
+# Start services
+make docker-up
+
+# View logs
+make docker-logs
+
+# Stop services
+make docker-down
+```
+
+## Deployment
+
+### Docker Deployment
+
+```bash
+
+# Start Minikube with sufficient resources
+minikube start --cpus=4 --memory=8192 --driver=docker
+# Or
+minikube start --cpus=4 --memory=8192 --disk-size=20g --driver=docker
+
+# Enable required addons
+minikube addons enable metrics-server
+minikube addons enable ingress
+
+# Build and Load Images (The "Minikube Dance")
+
+# 1. Build and Load Airflow:
+
+docker build -f docker/Dockerfile.airflow -t custom-airflow:2.9.0 .
+minikube image load custom-airflow:2.9.0
+
+# 2. Build and Load MLflow:
+
+docker build -f docker/Dockerfile.mlflow -t mlops-mlflow:latest .
+minikube image load mlops-mlflow:latest
+
+# 3. Build and Load Model Server:
+
+docker build -f docker/Dockerfile.model -t model-serving-api:latest .
+minikube image load model-serving-api:latest
+
+```
+
+### Kubernetes Deployment
+
+```bash
+# Deploy to Kubernetes
+./scripts/deploy.sh
+
+
+# 1. Clean up existing deployment (if any)
+# Delete the namespace (this removes everything)
+kubectl delete namespace ml-serving
+# Wait a moment for cleanup
+Start-Sleep -Seconds 10
+
+# 2. Create namespace
+kubectl create namespace ml-serving
+
+# 3. Deploy in the correct order
+# Deploy infrastructure first (order matters!)
+kubectl apply -f kubernetes/postgres/deployment.yaml
+kubectl apply -f kubernetes/redis/deployment.yaml
+kubectl apply -f kubernetes/minio/deployment.yaml
+
+# Wait for infrastructure to be ready
+kubectl wait --for=condition=ready pod -l app=postgres -n ml-serving --timeout=300s
+kubectl wait --for=condition=ready pod -l app=redis -n ml-serving --timeout=300s
+kubectl wait --for=condition=ready pod -l app=minio -n ml-serving --timeout=300s
+
+# Deploy MLflow
+kubectl apply -f kubernetes/mlflow/deployment.yaml
+kubectl wait --for=condition=ready pod -l app=mlflow -n ml-serving --timeout=300s
+
+# Deploy Airflow (optional, if you need it)
+kubectl apply -f kubernetes/airflow/
+
+# Deploy ConfigMaps
+kubectl apply -f kubernetes/configmap.yaml
+
+# Finally deploy your model
+kubectl apply -f kubernetes/model-deployment.yaml
+kubectl apply -f kubernetes/service.yaml
+
+# 4. Monitor the deployment
+# Watch pods come up
+kubectl get pods -n ml-serving -w
+
+# In another terminal, check logs
+kubectl logs -n ml-serving -l app=mlops-model -f
+
+# 5. Verify everything is working
+# Check all resources
+kubectl get all -n ml-serving
+
+# Check if MLflow is accessible
+kubectl run -n ml-serving curl-test --image=curlimages/curl --rm -it --restart=Never -- curl http://mlflow:5000/health
+
+# Check model pod logs
+kubectl logs -n ml-serving -l app=mlops-model --tail=50
+
+
+
+# Or using kubectl
+kubectl apply -f kubernetes/
+
+# Check status
+kubectl get pods -n ml-serving
+kubectl get services -n ml-serving
+
+
+# Verification
+# Check all pods
+kubectl get pods -n ml-serving
+
+# Check MLflow logs
+kubectl logs -n ml-serving -l app=mlflow --tail=50
+
+# Check Airflow scheduler logs (this loads DAGs)
+kubectl logs -n ml-serving -l component=scheduler --tail=50
+
+# Check DAGs (should show your 3 DAGs)
+kubectl port-forward -n ml-serving svc/airflow-webserver 8080:8080
+# Open http://localhost:8080 (admin/admin)
+
+# Check MLflow
+kubectl port-forward -n ml-serving svc/mlflow 5000:5000
+# Open http://localhost:5000
+
+# Check MinIO
+kubectl port-forward -n ml-serving svc/minio 9001:9001
+# Open http://localhost:9001 (minioadmin/minioadmin)
+
+```
+
+
+### Debug
+
+```bash
 # airflow
 
 # Check scheduler logs
@@ -473,6 +629,7 @@ kubectl get pods -n ml-serving
 
 
 
+
 # mlops-model-deployment
 
 # force Kubernetes to restart the pod and pick up the new code:
@@ -484,6 +641,7 @@ kubectl logs -n ml-serving -l component=model-server
 kubectl delete deployment mlops-model-deployment -n ml-serving
 # Re-apply it
 kubectl apply -f kubernetes/model-deployment.yaml
+
 
 
 
@@ -507,6 +665,32 @@ kubectl delete pod -n ml-serving -l component=model-server
 # Use this "Label Selector" command instead. 
 # It automatically finds the right pod for you:
 kubectl logs -n ml-serving -l component=model-server -f
+
+
+
+
+# rebuild and redeploy
+
+# 1. Delete the failing pods
+kubectl delete deployment churn-model -n ml-serving
+
+# 2. Rebuild the image
+docker build -f Dockerfile.model-server -t model-server:latest .
+
+# 3. Load into Minikube
+minikube image load model-server:latest
+
+# 4. Verify the image is loaded
+minikube image ls | grep model-server
+
+# 5. Redeploy
+kubectl apply -f kubernetes/model-serving/churn-model-deployment.yaml
+
+# 6. Watch the pods start
+kubectl get pods -n ml-serving -l app=churn-model -w
+
+# 7. Check logs
+kubectl logs -n ml-serving -l app=churn-model -f
 ```
 
 
