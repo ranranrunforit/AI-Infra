@@ -465,7 +465,8 @@ kubectl port-forward -n ml-serving svc/grafana 3000:3000
 # Step 1: Create Monitoring Namespace
 kubectl create namespace monitoring
 
-# Step 2: Option A: Install Prometheus Stack using Helm
+# Step 2: Deploy Prometheus Stack
+# Option A: Using Helm
 # Add Prometheus community Helm repo
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
@@ -479,7 +480,7 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
 
 helm upgrade prometheus prometheus-community/kube-prometheus-stack -f monitoring/prometheus-values.yaml -n monitoring
 
-Option B Manual Deployment
+# Option B Manual Deployment
 # Apply Prometheus configuration
 kubectl create configmap prometheus-config \
   --from-file=prometheus.yml \
