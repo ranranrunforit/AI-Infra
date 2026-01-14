@@ -477,6 +477,8 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
   --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
   --set grafana.adminPassword=admin
 
+helm upgrade prometheus prometheus-community/kube-prometheus-stack -f monitoring/prometheus-values.yaml -n monitoring
+
 Step 3: Verify Installation
 # Check all pods are running
 kubectl get pods -n monitoring
