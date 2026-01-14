@@ -574,6 +574,80 @@ kubectl port-forward -n ml-serving svc/minio 9001:9001
 ```
 
 
+
+### Monitoring Deployment
+
+```bash
+# Step-by-Step Setup
+
+# Step 1: Create Monitoring Namespace
+kubectl create namespace monitoring
+
+# Step 2: Install Prometheus Stack using Helm
+# Add Prometheus community Helm repo
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# Install Prometheus + Grafana + AlertManager
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+  --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
+  --set grafana.adminPassword=admin
+
+Step 3: Verify Installation
+# Check all pods are running
+kubectl get pods -n monitoring
+
+# Expected output:
+# prometheus-kube-prometheus-operator-...
+# prometheus-prometheus-kube-prometheus-prometheus-0
+# prometheus-grafana-...
+# prometheus-kube-state-metrics-...
+# prometheus-prometheus-node-exporter-...
+
+# Step 4: Configure Custom Prometheus Rules
+# Create the alert rules:
+kubectl apply -f monitoring/prometheus/alerts.yml
+
+# Step 5: Access Prometheus UI
+# Port forward Prometheus
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
+
+# Open browser: http://localhost:9090
+
+Step 6: Access Grafana UI
+# Port forward Grafana
+kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80
+
+# Open browser: http://localhost:3000
+# Login: admin / admin
+
+# Step 7: Configure Model Server Metrics
+# The model server needs to expose Prometheus metrics. Update your FastAPI app:
+# This is already in your app.py, just verify it's running
+kubectl get svc -n ml-serving
+
+# Step 8: Create ServiceMonitor for Model Server
+kubectl apply -f monitoring/servicemonitor.yaml
+
+# Step 9: Import Grafana Dashboard
+# Open Grafana (http://localhost:3000)
+# Go to Dashboards → Import
+# Upload monitoring/grafana/mlops-dashboard.json
+# Select Prometheus datasource
+# Click Import
+
+# Step 10: Test the Setup
+# Generate some predictions to create metrics
+kubectl run -it --rm test-client --image=curlimages/curl --restart=Never -- `
+  curl -X POST http://churn-model.ml-serving.svc.cluster.local:8000/predict `
+  -H "Content-Type: application/json" `
+  -d '{"features": [[0.5, 1.2, 0.8, 1.5, 0.3, 0.7, 1.1, 0.9, 0.4, 0.6, 1.3,
+```
+
+
+
 ### Debug
 
 ```bash
