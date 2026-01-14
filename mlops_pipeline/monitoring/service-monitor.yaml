@@ -1,0 +1,23 @@
+---
+# ServiceMonitor for automatic Prometheus discovery
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: churn-model-monitor
+  namespace: ml-serving
+  labels:
+    app: churn-model
+    release: prometheus  # Important: must match Prometheus operator selector
+spec:
+  selector:
+    matchLabels:
+      app: churn-model
+      component: model-server
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - ml-serving

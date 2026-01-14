@@ -1,4 +1,13 @@
-groups:
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mlops-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus  # This label is critical for the Operator to find this rule
+    app: kube-prometheus-stack
+spec:
+  groups:
   - name: mlops_alerts
     interval: 30s
     rules:

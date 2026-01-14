@@ -4,138 +4,318 @@
     "tags": ["mlops", "machine-learning", "model-serving"],
     "timezone": "browser",
     "schemaVersion": 16,
-    "version": 1,
+    "version": 2,
     "refresh": "30s",
-
-    "annotations": {
-      "list": [
-        {
-          "name": "Model Deployments",
-          "datasource": "Prometheus",
-          "enable": true,
-          "iconColor": "rgba(255, 96, 96, 1)",
-          "tags": ["deployment"]
-        }
-      ]
-    },
+    "uid": "mlops-dashboard",
+    "editable": true,
 
     "panels": [
       {
         "id": 1,
-        "title": "Model Prediction Rate",
+        "title": "Prediction Rate (requests/sec)",
         "type": "graph",
         "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
         "targets": [
           {
-            "expr": "rate(model_predictions_total[5m])",
-            "legendFormat": "Predictions/sec",
+            "expr": "rate(model_predictions_total{status=\"success\"}[5m])",
+            "legendFormat": "{{model_name}} v{{model_version}}",
             "refId": "A"
           }
         ],
-        "description": "TODO: Add PromQL query for prediction rate"
+        "yaxes": [
+          {"format": "reqps", "label": "Predictions/sec"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "pointradius": 5
       },
 
       {
         "id": 2,
-        "title": "Prediction Latency (P99)",
+        "title": "Prediction Latency (P50, P95, P99)",
         "type": "graph",
         "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
         "targets": [
           {
-            "expr": "histogram_quantile(0.99, rate(model_prediction_latency_bucket[5m]))",
-            "legendFormat": "P99 Latency",
+            "expr": "histogram_quantile(0.50, rate(model_prediction_latency_seconds_bucket[5m]))",
+            "legendFormat": "P50",
             "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(model_prediction_latency_seconds_bucket[5m]))",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(model_prediction_latency_seconds_bucket[5m]))",
+            "legendFormat": "P99",
+            "refId": "C"
           }
         ],
-        "description": "TODO: Add PromQL query for latency percentiles"
+        "yaxes": [
+          {"format": "s", "label": "Latency"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 0,
+        "linewidth": 2
       },
 
       {
         "id": 3,
-        "title": "Model Accuracy Over Time",
-        "type": "graph",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "title": "Total Predictions",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 4, "x": 0, "y": 8},
         "targets": [
           {
-            "expr": "model_accuracy",
-            "legendFormat": "Accuracy",
+            "expr": "sum(model_predictions_total)",
             "refId": "A"
           }
         ],
-        "description": "TODO: Add PromQL query for model performance metrics"
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "textMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0
+          }
+        }
       },
 
       {
         "id": 4,
         "title": "Error Rate",
-        "type": "graph",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 4, "x": 4, "y": 8},
         "targets": [
           {
-            "expr": "rate(model_errors_total[5m])",
-            "legendFormat": "Errors/sec",
+            "expr": "rate(model_prediction_errors_total[5m])",
             "refId": "A"
           }
         ],
-        "description": "TODO: Add PromQL query for error rates"
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 0.1, "color": "yellow"},
+                {"value": 1, "color": "red"}
+              ]
+            }
+          }
+        }
       },
 
       {
         "id": 5,
-        "title": "Active Pods",
+        "title": "Model Loaded",
         "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+        "gridPos": {"h": 4, "w": 4, "x": 8, "y": 8},
         "targets": [
           {
-            "expr": "count(kube_pod_status_phase{pod=~\"mlops-model.*\", phase=\"Running\"})",
-            "legendFormat": "Running Pods",
+            "expr": "model_loaded",
             "refId": "A"
           }
         ],
-        "description": "TODO: Add PromQL query for pod count"
+        "options": {
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "value": "1", "text": "LOADED"},
+              {"type": "value", "value": "0", "text": "NOT LOADED"}
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            }
+          }
+        }
       },
 
       {
         "id": 6,
-        "title": "Current Model Version",
-        "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+        "title": "Model Accuracy (Training Pipeline)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
         "targets": [
           {
-            "expr": "model_version_info",
-            "legendFormat": "Version: {{version}}",
+            "expr": "model_accuracy",
+            "legendFormat": "{{model_name}} v{{model_version}}",
             "refId": "A"
           }
         ],
-        "description": "TODO: Add metric for current model version"
+        "yaxes": [
+          {"format": "percentunit", "min": 0, "max": 1, "label": "Accuracy"},
+          {"format": "short"}
+        ]
       },
 
       {
         "id": 7,
-        "title": "CPU Usage",
+        "title": "Model F1 Score (Training Pipeline)",
         "type": "graph",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
         "targets": [
           {
-            "expr": "rate(container_cpu_usage_seconds_total{pod=~\"mlops-model.*\"}[5m])",
-            "legendFormat": "{{pod}}",
+            "expr": "model_f1_score",
+            "legendFormat": "{{model_name}} v{{model_version}}",
             "refId": "A"
           }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "min": 0, "max": 1, "label": "F1 Score"},
+          {"format": "short"}
         ]
       },
 
       {
         "id": 8,
-        "title": "Memory Usage",
+        "title": "Pipeline Runs",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "rate(pipeline_runs_total{status=\"success\"}[1h])",
+            "legendFormat": "Success - {{pipeline_name}}",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(pipeline_runs_total{status=\"failed\"}[1h])",
+            "legendFormat": "Failed - {{pipeline_name}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Runs/hour"},
+          {"format": "short"}
+        ]
+      },
+
+      {
+        "id": 9,
+        "title": "Feature Drift Scores",
         "type": "graph",
         "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
         "targets": [
           {
-            "expr": "container_memory_usage_bytes{pod=~\"mlops-model.*\"}",
+            "expr": "feature_drift_score",
+            "legendFormat": "{{feature_name}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "min": 0, "max": 1, "label": "Drift Score"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [0.1], "type": "gt"},
+              "query": {"params": ["A", "5m", "now"]}
+            }
+          ],
+          "name": "High Feature Drift"
+        }
+      },
+
+      {
+        "id": 10,
+        "title": "CPU Usage by Pod",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{namespace=\"ml-serving\",pod=~\"churn-model.*\"}[5m])",
             "legendFormat": "{{pod}}",
             "refId": "A"
           }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "CPU"},
+          {"format": "short"}
         ]
+      },
+
+      {
+        "id": 11,
+        "title": "Memory Usage by Pod",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{namespace=\"ml-serving\",pod=~\"churn-model.*\"}",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "bytes", "label": "Memory"},
+          {"format": "short"}
+        ]
+      },
+
+      {
+        "id": 12,
+        "title": "Active Replicas",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 36},
+        "targets": [
+          {
+            "expr": "kube_deployment_status_replicas_available{deployment=\"churn-model\",namespace=\"ml-serving\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+
+      {
+        "id": 13,
+        "title": "Deployment Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 36},
+        "targets": [
+          {
+            "expr": "kube_deployment_status_condition{deployment=\"churn-model\",namespace=\"ml-serving\",condition=\"Available\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "value": "1", "text": "AVAILABLE"},
+              {"type": "value", "value": "0", "text": "UNAVAILABLE"}
+            ],
+            "thresholds": {
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            }
+          }
+        }
       }
     ],
 
@@ -143,22 +323,12 @@
       "list": [
         {
           "name": "namespace",
-          "type": "query",
-          "query": "label_values(kube_pod_info, namespace)",
+          "type": "constant",
           "current": {
-            "text": "default",
-            "value": "default"
-          }
-        },
-        {
-          "name": "pod",
-          "type": "query",
-          "query": "label_values(kube_pod_info{namespace=\"$namespace\"}, pod)",
-          "current": {
-            "text": "All",
-            "value": "$__all"
+            "text": "ml-serving",
+            "value": "ml-serving"
           },
-          "multi": true
+          "query": "ml-serving"
         }
       ]
     },

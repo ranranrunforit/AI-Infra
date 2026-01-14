@@ -27,16 +27,16 @@ scrape_configs:
       - targets: ['mlops-model-service:8000']
 
   # # Airflow metrics
-  # - job_name: 'airflow'
-  #   static_configs:
-  #     - targets: ['airflow-webserver:8080']
-  #   metrics_path: '/metrics'
+  - job_name: 'airflow'
+    static_configs:
+      - targets: ['airflow-webserver:8080']
+    metrics_path: '/metrics'
 
-  # # MLflow metrics (if exposed)
-  # - job_name: 'mlflow'
-  #   static_configs:
-  #     - targets: ['mlflow:5000']
-  #   metrics_path: '/metrics'
+  # MLflow metrics (if exposed)
+  - job_name: 'mlflow'
+    static_configs:
+      - targets: ['mlflow:5000']
+    metrics_path: '/metrics'
 
   # Pushgateway for batch jobs
   - job_name: 'pushgateway'

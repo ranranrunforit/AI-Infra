@@ -1,0 +1,267 @@
+# Helm values for kube-prometheus-stack
+
+## Prometheus configuration
+prometheus:
+  prometheusSpec:
+    # Enable service monitor auto-discovery
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    
+    # Scrape interval
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    
+    # Retention
+    retention: 15d
+    retentionSize: "50GB"
+    
+    # Storage
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    
+    # Resources
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: 1000m
+      limits:
+        memory: 4Gi
+        cpu: 2000m
+    
+    # Additional scrape configs
+    additionalScrapeConfigs:
+      - job_name: 'model-server-static'
+        static_configs:
+          - targets: ['churn-model.ml-serving.svc.cluster.local:8000']
+        metrics_path: /metrics
+
+## Grafana configuration
+grafana:
+  enabled: true
+  adminPassword: admin  # Change this in production!
+  
+  # Enable persistence
+  persistence:
+    enabled: true
+    size: 10Gi
+  
+  # Grafana plugins
+  plugins:
+    - grafana-piechart-panel
+    - grafana-clock-panel
+  
+  # Data sources
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-operated:9090
+          access: proxy
+          isDefault: true
+          editable: true
+  
+  # Dashboard providers
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'mlops'
+          orgId: 1
+          folder: 'MLOps'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/mlops
+  
+  # Import dashboards
+  dashboardsConfigMaps:
+    mlops: "mlops-dashboards"
+  
+  # Service configuration
+  service:
+    type: ClusterIP  # Change from NodePort to ClusterIP
+    # Remove nodePort line
+    # type: NodePort
+    # nodePort: 30300
+  
+  # Resources
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 200m
+
+## AlertManager configuration
+alertmanager:
+  enabled: true
+  
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 200m
+  
+  config:
+    global:
+      resolve_timeout: 5m
+    
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: 'null'
+      routes:
+        - match:
+            alertname: Watchdog
+          receiver: 'null'
+        - match:
+            severity: critical
+          receiver: 'critical'
+        - match:
+            severity: warning
+          receiver: 'warning'
+    
+    receivers:
+      - name: 'null'
+      - name: 'critical'
+        # Add Slack webhook here
+        # slack_configs:
+        #   - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        #     channel: '#mlops-critical'
+        #     title: 'Critical Alert'
+        #     text: '{{ .CommonAnnotations.description }}'
+      - name: 'warning'
+        # Add Slack webhook here
+        # slack_configs:
+        #   - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        #     channel: '#mlops-warnings'
+        #     title: 'Warning Alert'
+        #     text: '{{ .CommonAnnotations.description }}'
+
+## Node Exporter
+prometheus-node-exporter:
+  enabled: true
+
+## Kube State Metrics
+kube-state-metrics:
+  enabled: true
+
+## Additional configurations
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false
+    general: true
+    k8s: true
+    kubeApiserver: false
+    kubeApiserverAvailability: false
+    kubeApiserverSlos: false
+    kubelet: true
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    kubeScheduler: false
+    kubeStateMetrics: true
+    network: true
+    node: true
+    prometheus: true
+    prometheusOperator: true
+
+## Custom alert rules
+additionalPrometheusRulesMap:
+  mlops-rules:
+    groups:
+      - name: mlops_alerts
+        interval: 30s
+        rules:
+          - alert: ModelPredictionErrors
+            expr: rate(model_prediction_errors_total[5m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High prediction error rate"
+              description: "Model {{ $labels.model_name }} has error rate {{ $value }}/s"
+          
+          - alert: HighPredictionLatency
+            expr: histogram_quantile(0.99, rate(model_prediction_latency_seconds_bucket[5m])) > 1
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High prediction latency"
+              description: "P99 latency is {{ $value }}s"
+          
+          - alert: ModelNotLoaded
+            expr: model_loaded == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Model not loaded"
+              description: "Model serving pod has no model loaded"
+          
+          - alert: LowPredictionRate
+            expr: rate(model_predictions_total[10m]) < 0.01
+            for: 15m
+            labels:
+              severity: info
+            annotations:
+              summary: "Low prediction rate"
+              description: "Prediction rate is very low: {{ $value }}/s"
+
+# 1. ETCD Configuration
+kubeEtcd:
+  enabled: true
+  service:
+    enabled: true
+    port: 2381
+    targetPort: 2381
+
+# 2. Controller Manager Configuration
+kubeControllerManager:
+  enabled: true
+  service:
+    enabled: true
+    port: 10257
+    targetPort: 10257
+  serviceMonitor:
+    https: true
+    insecureSkipVerify: true
+
+# 3. Scheduler Configuration
+kubeScheduler:
+  enabled: true
+  service:
+    enabled: true
+    port: 10259
+    targetPort: 10259
+  serviceMonitor:
+    https: true
+    insecureSkipVerify: true
