@@ -501,7 +501,7 @@ kubectl create namespace ml-serving
 # Deploy infrastructure first (order matters!)
 kubectl apply -f kubernetes/postgres/deployment.yaml
 kubectl apply -f kubernetes/redis/deployment.yaml
-kubectl apply -f kubernetes/minio/deployment.yaml
+kubectl apply -f kubernetes/minio/
 
 # Wait for infrastructure to be ready
 kubectl wait --for=condition=ready pod -l app=postgres -n ml-serving --timeout=300s
