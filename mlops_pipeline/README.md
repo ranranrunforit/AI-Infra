@@ -423,6 +423,7 @@ kubectl get pods -n ml-serving
 kubectl get services -n ml-serving
 
 
+
 # Verification
 # Check all pods
 kubectl get pods -n ml-serving
@@ -445,6 +446,13 @@ kubectl port-forward -n ml-serving svc/mlflow 5000:5000
 kubectl port-forward -n ml-serving svc/minio 9001:9001
 # Open http://localhost:9001 (minioadmin/minioadmin)
 
+# Check metrics
+kubectl port-forward -n ml-serving svc/prometheus 9090:9090
+# open http://localhost:9090
+
+# View dashboards
+kubectl port-forward -n ml-serving svc/grafana 3000:3000
+# open http://localhost:3000
 ```
 
 
