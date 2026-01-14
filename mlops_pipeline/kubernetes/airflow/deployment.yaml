@@ -181,6 +181,7 @@ spec:
         app: airflow
         component: worker
     spec:
+      serviceAccountName: airflow  # Add this line
       initContainers:
       - name: wait-for-db
         image: busybox:latest
