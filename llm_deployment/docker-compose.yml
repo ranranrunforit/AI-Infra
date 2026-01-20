@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # LLM API Service
+  # LLM API Service - RTX 5070 Optimized (12GB VRAM)
   llm-api:
     build:
       context: .
@@ -11,16 +11,23 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MODEL_CONFIG=tiny-llama  # Use tiny-llama for testing, llama2-7b-chat for production
+      # RTX 5070 optimized settings (12GB VRAM)
+      - MODEL_CONFIG=rtx-5070
       - EMBEDDING_MODEL=all-MiniLM-L6-v2
       - VECTOR_DB_BACKEND=chromadb
       - CHROMA_PERSIST_DIR=/app/chroma_db
       - RAG_TOP_K=5
       - RAG_CHUNK_SIZE=512
       - RAG_CHUNK_OVERLAP=50
-      - GPU_COST_PER_HOUR=1.0
-      - RATE_LIMIT_RPM=60
+      - GPU_COST_PER_HOUR=0.40
+      - RATE_LIMIT_RPM=45
       - LOG_LEVEL=INFO
+      # Memory optimization for 12GB VRAM
+      - PYTORCH_ALLOC_CONF=max_split_size_mb:256
+      - CUDA_VISIBLE_DEVICES=0
+      - CUDA_LAUNCH_BLOCKING=0
+      # Add your Hugging Face token here
+      - HUGGING_FACE_TOKEN=${HUGGING_FACE_TOKEN}
     volumes:
       - ./chroma_db:/app/chroma_db
       - ./models:/app/models
@@ -33,6 +40,8 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+        limits:
+          memory: 10g  # Reduced host RAM limit for 12GB card
     networks:
       - llm-network
     healthcheck:
@@ -40,8 +49,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 150s  # Allow more time for smaller card
     restart: unless-stopped
+    shm_size: '3gb'  # Shared memory for PyTorch (reduced from 4gb)
 
   # ChromaDB (vector database)
   chromadb:
@@ -76,8 +86,8 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+      - ./monitoring/prometheus/prometheus-docker.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     networks:
       - llm-network
@@ -94,8 +104,8 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - grafana-data:/var/lib/grafana
     networks:
       - llm-network
@@ -113,7 +123,7 @@ services:
       - redis-data:/data
     networks:
       - llm-network
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

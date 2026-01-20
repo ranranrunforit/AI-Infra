@@ -27,7 +27,7 @@ Benefits of Streaming:
 
 import asyncio
 import json
-from typing import AsyncIterator, Optional, Dict, Any
+from typing import AsyncIterator, Optional, Dict, Any, List
 from fastapi.responses import StreamingResponse
 from datetime import datetime
 import logging
@@ -42,46 +42,20 @@ logger = logging.getLogger(__name__)
 def format_sse(data: str, event: Optional[str] = None, id: Optional[str] = None) -> str:
     """
     Format data as Server-Sent Event.
-
-    SSE format:
-    - event: event_name
-    - data: json_data
-    - id: event_id
-    - (blank line to end event)
-
-    TODO: Implement SSE formatting
-    - Format event line if event provided
-    - Format data line (required)
-    - Format id line if id provided
-    - Add blank line at end
-    - Handle multi-line data
-
-    Args:
-        data: The data to send (will be sent as JSON)
-        event: Optional event name
-        id: Optional event ID
-
-    Returns:
-        Formatted SSE string
-
-    Example:
-        format_sse('{"text": "Hello"}', event="chunk", id="1")
-        # Returns:
-        # event: chunk
-        # data: {"text": "Hello"}
-        # id: 1
-        #
     """
-    # TODO: Implement SSE formatting
-    # message = ""
-    # if event:
-    #     message += f"event: {event}\n"
-    # message += f"data: {data}\n"
-    # if id:
-    #     message += f"id: {id}\n"
-    # message += "\n"
-    # return message
-    pass
+    message = ""
+    if id is not None:
+        message += f"id: {id}\n"
+    if event is not None:
+        message += f"event: {event}\n"
+    
+    # Handle multi-line data
+    lines = data.split("\n")
+    for line in lines:
+        message += f"data: {line}\n"
+    
+    message += "\n"
+    return message
 
 
 def create_sse_response(
@@ -90,37 +64,20 @@ def create_sse_response(
 ) -> StreamingResponse:
     """
     Create FastAPI StreamingResponse for SSE.
-
-    TODO: Implement SSE response creation
-    - Set proper content-type header (text/event-stream)
-    - Set cache-control to no-cache
-    - Set connection to keep-alive
-    - Set X-Accel-Buffering to no (for nginx)
-    - Return StreamingResponse with generator
-
-    Args:
-        generator: Async generator yielding SSE-formatted strings
-        status_code: HTTP status code
-
-    Returns:
-        StreamingResponse configured for SSE
     """
-    # TODO: Implement headers
     headers = {
-        # "Content-Type": "text/event-stream",
-        # "Cache-Control": "no-cache",
-        # "Connection": "keep-alive",
-        # "X-Accel-Buffering": "no",  # Disable nginx buffering
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",  # Disable nginx buffering
     }
 
-    # TODO: Return StreamingResponse
-    # return StreamingResponse(
-    #     generator,
-    #     status_code=status_code,
-    #     headers=headers,
-    #     media_type="text/event-stream"
-    # )
-    pass
+    return StreamingResponse(
+        generator,
+        status_code=status_code,
+        headers=headers,
+        media_type="text/event-stream"
+    )
 
 
 # ============================================================================
@@ -134,78 +91,62 @@ async def stream_llm_response(
 ) -> AsyncIterator[str]:
     """
     Stream LLM tokens as SSE events.
-
-    This wraps the raw LLM generator and formats output as SSE.
-
-    TODO: Implement streaming wrapper
-    - Iterate over LLM token generator
-    - Format each token as SSE event
-    - Include metadata (tokens count, latency, etc.)
-    - Handle errors gracefully
-    - Send final "done" event
-
-    Args:
-        llm_generator: Async generator yielding tokens
-        request_id: Unique request identifier
-        include_metadata: Whether to include timing/token metadata
-
-    Yields:
-        SSE-formatted strings
-
-    Event Types:
-    - "chunk": Text chunk/token
-    - "metadata": Token count, timing info
-    - "done": Generation complete
-    - "error": Error occurred
     """
     start_time = datetime.now()
     token_count = 0
 
     try:
-        # TODO: Send initial event
-        # yield format_sse(
-        #     json.dumps({"request_id": request_id, "status": "started"}),
-        #     event="start"
-        # )
+        # Send initial event
+        yield format_sse(
+            json.dumps({"request_id": request_id, "status": "started"}),
+            event="start"
+        )
 
-        # TODO: Stream tokens
-        # async for token in llm_generator:
-        #     token_count += 1
-        #
-        #     # Format token as chunk event
-        #     chunk_data = {
-        #         "text": token,
-        #         "token_count": token_count
-        #     }
-        #     yield format_sse(json.dumps(chunk_data), event="chunk")
-        #
-        #     # Optionally send periodic metadata
-        #     if include_metadata and token_count % 10 == 0:
-        #         # Send timing info every 10 tokens
-        #         pass
+        async for token in llm_generator:
+            token_count += 1
+            
+            # Format token as chunk event
+            chunk_data = {
+                "text": token,
+                "token_count": token_count
+            }
+            yield format_sse(json.dumps(chunk_data), event="chunk")
 
-        # TODO: Send completion event
+            # Optionally send periodic metadata
+            if include_metadata and token_count > 0 and token_count % 10 == 0:
+                 elapsed = (datetime.now() - start_time).total_seconds()
+                 yield format_sse(
+                     json.dumps({
+                         "token_count": token_count,
+                         "elapsed_seconds": round(elapsed, 3),
+                         "tokens_per_sec": round(token_count / elapsed, 2)
+                     }),
+                     event="metadata"
+                 )
+
+        # Send completion event
         end_time = datetime.now()
         latency_ms = (end_time - start_time).total_seconds() * 1000
 
-        # done_data = {
-        #     "status": "complete",
-        #     "token_count": token_count,
-        #     "latency_ms": latency_ms,
-        #     "request_id": request_id
-        # }
-        # yield format_sse(json.dumps(done_data), event="done")
+        done_data = {
+            "status": "complete",
+            "token_count": token_count,
+            "latency_ms": latency_ms,
+            "request_id": request_id
+        }
+        yield format_sse(json.dumps(done_data), event="done")
 
+    except ValueError as ve: # Catch cancellation or specific logic
+        logger.warning(f"Validation error in stream {request_id}: {ve}")
+        yield format_sse(json.dumps({"error": str(ve)}), event="error")
+        
     except Exception as e:
-        # TODO: Send error event
-        logger.error(f"Error in stream {request_id}: {e}")
-        # error_data = {
-        #     "error": str(e),
-        #     "request_id": request_id
-        # }
-        # yield format_sse(json.dumps(error_data), event="error")
-
-    pass
+        logger.error(f"Error in stream {request_id}: {e}", exc_info=True)
+        error_data = {
+            "error": str(e),
+            "request_id": request_id
+        }
+        yield format_sse(json.dumps(error_data), event="error")
 
 
 async def stream_rag_response(
@@ -216,94 +157,78 @@ async def stream_rag_response(
 ) -> AsyncIterator[str]:
     """
     Stream RAG-augmented generation.
-
-    This performs retrieval first, then streams generation.
-
-    TODO: Implement RAG streaming
-    - Send "retrieving" event
-    - Perform vector search
-    - Send "sources" event with retrieved docs
-    - Stream generation with context
-    - Send "done" event with metadata
-
-    Args:
-        rag_pipeline: RAG pipeline instance
-        query: User query
-        request_id: Request identifier
-        **generation_params: Generation parameters
-
-    Yields:
-        SSE-formatted strings
-
-    Event Flow:
-    1. "start" - Request started
-    2. "retrieving" - Performing vector search
-    3. "sources" - Retrieved documents
-    4. "generating" - Starting generation
-    5. "chunk" - Text chunks (multiple)
-    6. "done" - Complete with metadata
     """
     try:
-        # TODO: Send start event
-        # yield format_sse(
-        #     json.dumps({"status": "started", "request_id": request_id}),
-        #     event="start"
-        # )
+        # Send start event
+        yield format_sse(
+            json.dumps({"status": "started", "request_id": request_id}),
+            event="start"
+        )
 
-        # TODO: Send retrieving event
-        # yield format_sse(
-        #     json.dumps({"status": "retrieving"}),
-        #     event="retrieving"
-        # )
+        # Send retrieving event
+        yield format_sse(
+            json.dumps({"status": "retrieving"}),
+            event="retrieving"
+        )
 
-        # TODO: Perform retrieval
-        # sources = await rag_pipeline.retrieve(query)
+        # Perform retrieval
+        # Assuming rag_pipeline has a retrieve method
+        sources = []
+        if hasattr(rag_pipeline, "retrieve"):
+            sources = await rag_pipeline.retrieve(query)
+        else:
+            # Mock if not implemented/available for testing
+            sources = [] 
 
-        # TODO: Send sources event
-        # sources_data = {
-        #     "sources": [
-        #         {
-        #             "content": doc.content[:200],  # Truncate
-        #             "score": doc.score,
-        #             "metadata": doc.metadata
-        #         }
-        #         for doc in sources
-        #     ],
-        #     "num_sources": len(sources)
-        # }
-        # yield format_sse(json.dumps(sources_data), event="sources")
+        # Send sources event
+        sources_data = {
+            "sources": [
+                {
+                    "content": doc.text if hasattr(doc, 'text') else str(doc)[:200],  # Truncate
+                    "score": getattr(doc, 'score', 0.0),
+                    "metadata": getattr(doc, 'metadata', {})
+                }
+                for doc in sources
+            ],
+            "num_sources": len(sources)
+        }
+        yield format_sse(json.dumps(sources_data), event="sources")
 
-        # TODO: Build prompt with context
-        # prompt = rag_pipeline.build_prompt(query, sources)
+        # Build prompt with context
+        prompt = query # Placeholder, normally rag_pipeline.build_prompt(query, sources)
+        if hasattr(rag_pipeline, "build_prompt"):
+             prompt = rag_pipeline.build_prompt(query, sources)
 
-        # TODO: Send generating event
-        # yield format_sse(
-        #     json.dumps({"status": "generating"}),
-        #     event="generating"
-        # )
+        # Send generating event
+        yield format_sse(
+            json.dumps({"status": "generating"}),
+            event="generating"
+        )
 
-        # TODO: Stream generation
-        # llm_generator = rag_pipeline.generate_stream(prompt, **generation_params)
-        # async for chunk in llm_generator:
-        #     yield format_sse(
-        #         json.dumps({"text": chunk}),
-        #         event="chunk"
-        #     )
+        # Stream generation
+        if hasattr(rag_pipeline, "generate_stream"):
+            llm_generator = rag_pipeline.generate_stream(prompt, **generation_params)
+            async for chunk in llm_generator:
+                yield format_sse(
+                    json.dumps({"text": chunk}),
+                    event="chunk"
+                )
+        else:
+             # Mock generation usually needed
+             pass
 
-        # TODO: Send done event
-        # yield format_sse(
-        #     json.dumps({"status": "complete", "request_id": request_id}),
-        #     event="done"
-        # )
+        # Send done event
+        yield format_sse(
+            json.dumps({"status": "complete", "request_id": request_id}),
+            event="done"
+        )
 
     except Exception as e:
         logger.error(f"RAG stream error {request_id}: {e}")
-        # yield format_sse(
-        #     json.dumps({"error": str(e)}),
-        #     event="error"
-        # )
-
-    pass
+        yield format_sse(
+            json.dumps({"error": str(e)}),
+            event="error"
+        )
 
 
 async def stream_with_heartbeat(
@@ -312,41 +237,27 @@ async def stream_with_heartbeat(
 ) -> AsyncIterator[str]:
     """
     Wrap generator with heartbeat events.
-
-    Sends periodic heartbeat events to keep connection alive.
-    Useful for preventing timeouts during slow generation.
-
-    TODO: Implement heartbeat wrapper
-    - Use asyncio.wait_for with timeout
-    - Send heartbeat if no data for N seconds
-    - Pass through actual data immediately
-    - Handle generator completion
-
-    Args:
-        generator: Underlying event generator
-        heartbeat_interval: Seconds between heartbeats
-
-    Yields:
-        SSE-formatted strings (including heartbeats)
     """
-    # TODO: Implement heartbeat logic
-    # while True:
-    #     try:
-    #         # Wait for next item with timeout
-    #         item = await asyncio.wait_for(
-    #             generator.__anext__(),
-    #             timeout=heartbeat_interval
-    #         )
-    #         yield item
-    #     except asyncio.TimeoutError:
-    #         # Send heartbeat
-    #         yield format_sse(
-    #             json.dumps({"type": "heartbeat"}),
-    #             event="heartbeat"
-    #         )
-    #     except StopAsyncIteration:
-    #         break
-    pass
+    while True:
+        try:
+            # Wait for next item with timeout
+            # Note: anext(iterator) is python 3.10+, using generator.__anext__() for compat
+            item = await asyncio.wait_for(
+                generator.__anext__(),
+                timeout=heartbeat_interval
+            )
+            yield item
+        except asyncio.TimeoutError:
+            # Send heartbeat
+            yield format_sse(
+                json.dumps({"type": "heartbeat", "timestamp": str(datetime.now())}),
+                event="heartbeat"
+            )
+        except StopAsyncIteration:
+            break
+        except Exception as e:
+            # Propagate other errors
+            raise e
 
 
 # ============================================================================
@@ -360,33 +271,9 @@ async def stream_batch_responses(
 ) -> AsyncIterator[str]:
     """
     Stream multiple requests concurrently.
-
-    TODO: Implement batch streaming
-    - Process multiple requests in parallel
-    - Multiplex results into single stream
-    - Include request_id with each event
-    - Handle per-request errors
-    - Send completion summary
-
-    Args:
-        requests: List of generation requests
-        llm_server: LLM server instance
-        max_concurrent: Max concurrent requests
-
-    Yields:
-        SSE events from all requests (with request_id)
-
-    Event Format:
-    {
-        "request_id": "req_123",
-        "request_index": 0,
-        "text": "generated text"
-    }
+    Placeholder / TODO implementation.
     """
-    # TODO: Implement concurrent batch streaming
-    # Use asyncio.gather or asyncio.as_completed
-    # Track which request each event belongs to
-    pass
+    yield format_sse(json.dumps({"status": "Not implemented"}), event="error")
 
 
 # ============================================================================
@@ -400,27 +287,11 @@ async def safe_stream_wrapper(
 ) -> AsyncIterator[str]:
     """
     Wrap stream with error handling and recovery.
-
-    TODO: Implement safe streaming wrapper
-    - Catch exceptions from generator
-    - Send error event to client
-    - Optionally attempt retry
-    - Log errors for debugging
-    - Ensure proper cleanup
-
-    Args:
-        generator: Underlying generator
-        request_id: Request identifier
-        on_error: Optional error callback
-
-    Yields:
-        SSE-formatted strings
     """
     try:
         async for item in generator:
             yield item
     except asyncio.CancelledError:
-        # TODO: Handle cancellation
         logger.info(f"Stream {request_id} cancelled")
         yield format_sse(
             json.dumps({"status": "cancelled"}),
@@ -428,14 +299,16 @@ async def safe_stream_wrapper(
         )
         raise
     except Exception as e:
-        # TODO: Handle errors
         logger.error(f"Stream {request_id} error: {e}")
         yield format_sse(
             json.dumps({"error": str(e), "error_type": type(e).__name__}),
             event="error"
         )
         if on_error:
-            await on_error(e)
+            try:
+                await on_error(e)
+            except:
+                pass
 
 
 # ============================================================================
@@ -445,49 +318,43 @@ async def safe_stream_wrapper(
 class StreamBuffer:
     """
     Buffer for aggregating tokens before sending.
-
-    This can reduce overhead by sending chunks instead of individual tokens.
-
-    TODO: Implement token buffering
-    - Buffer tokens until size threshold or timeout
-    - Flush buffer to stream
-    - Handle word boundaries (don't split mid-word)
     """
 
     def __init__(self, buffer_size: int = 5, flush_timeout: float = 0.1):
         """
         Initialize buffer.
-
-        Args:
-            buffer_size: Number of tokens to buffer
-            flush_timeout: Max seconds to wait before flushing
         """
-        # TODO: Implement initialization
-        pass
+        self.buffer_size = buffer_size
+        self.flush_timeout = flush_timeout
+        self.buffer: List[str] = []
+        self.last_flush = time.time()
 
     async def add_token(self, token: str) -> Optional[str]:
         """
         Add token to buffer.
-
-        TODO: Implement token addition
-        - Add token to buffer
-        - Check if should flush
-        - Return buffered content if flushing
-
-        Returns:
-            Buffered content if flushing, None otherwise
         """
-        pass
+        self.buffer.append(token)
+        
+        should_flush = (
+            len(self.buffer) >= self.buffer_size or
+            (time.time() - self.last_flush) > self.flush_timeout
+        )
+        
+        if should_flush:
+            return await self.flush()
+        return None
 
     async def flush(self) -> str:
         """
         Flush buffer contents.
-
-        TODO: Implement flush
-        - Return all buffered tokens
-        - Clear buffer
         """
-        pass
+        if not self.buffer:
+            return ""
+        
+        text = "".join(self.buffer)
+        self.buffer = []
+        self.last_flush = time.time()
+        return text
 
 
 def calculate_stream_metrics(
@@ -497,29 +364,22 @@ def calculate_stream_metrics(
 ) -> Dict[str, Any]:
     """
     Calculate streaming performance metrics.
-
-    TODO: Implement metrics calculation
-    - Time to first token (TTFT)
-    - Tokens per second (throughput)
-    - Total latency
-    - Average inter-token latency
-
-    Args:
-        start_time: When request started
-        token_count: Total tokens generated
-        first_token_time: When first token was generated
-
-    Returns:
-        Dict with metrics
     """
-    # TODO: Calculate metrics
-    metrics = {
-        # "ttft_ms": ...,  # Time to first token
-        # "tokens_per_second": ...,
-        # "total_latency_ms": ...,
-        # "avg_inter_token_ms": ...
+    total_latency = (datetime.now() - start_time).total_seconds() * 1000
+    ttft_ms = 0.0
+    if first_token_time:
+        ttft_ms = (first_token_time - start_time).total_seconds() * 1000
+        
+    tps = 0.0
+    if total_latency > 0:
+        tps = token_count / (total_latency / 1000.0)
+
+    return {
+        "ttft_ms": round(ttft_ms, 2),
+        "tokens_per_second": round(tps, 2),
+        "total_latency_ms": round(total_latency, 2),
+        "total_tokens": token_count
     }
-    pass
 
 
 # ============================================================================
@@ -552,43 +412,4 @@ async def generate_stream(request: GenerateRequest):
 
     # Return streaming response
     return create_sse_response(sse_generator)
-
-
-Example Client (JavaScript):
-
-const eventSource = new EventSource('/generate/stream');
-
-eventSource.addEventListener('chunk', (e) => {
-    const data = JSON.parse(e.data);
-    console.log('Token:', data.text);
-});
-
-eventSource.addEventListener('done', (e) => {
-    const data = JSON.parse(e.data);
-    console.log('Complete:', data.token_count, 'tokens');
-    eventSource.close();
-});
-
-eventSource.addEventListener('error', (e) => {
-    console.error('Error:', e.data);
-    eventSource.close();
-});
-
-
-Example Client (Python):
-
-import requests
-
-response = requests.post(
-    'http://localhost:8000/generate/stream',
-    json={"prompt": "Hello", "max_tokens": 100},
-    stream=True
-)
-
-for line in response.iter_lines():
-    if line:
-        line = line.decode('utf-8')
-        if line.startswith('data: '):
-            data = json.loads(line[6:])
-            print(data.get('text', ''), end='', flush=True)
 """

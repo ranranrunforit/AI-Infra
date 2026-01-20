@@ -52,16 +52,10 @@ spec:
 
         # TODO: Configure environment variables
         env:
-          - name: MODEL_NAME
-            value: "meta-llama/Llama-2-7b-chat-hf"
-          - name: MODEL_PATH
-            value: "/models"
-          - name: MAX_BATCH_SIZE
-            value: "8"
-          - name: GPU_MEMORY_UTILIZATION
-            value: "0.9"
-          - name: QUANTIZATION
-            value: "fp16"  # Options: fp16, int8, int4
+          - name: MODEL_CONFIG
+            value: "laptop-5070"  # Uses the optimized preset
+          - name: LOG_LEVEL
+            value: "INFO"
           - name: LOG_LEVEL
             value: "INFO"
           # TODO: Add secrets for API keys

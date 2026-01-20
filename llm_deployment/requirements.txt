@@ -7,7 +7,7 @@ accelerate>=0.24.0  # Model loading utilities
 # RAG and Embeddings
 sentence-transformers>=2.2.0  # Embedding models
 chromadb>=0.4.18  # Vector database (local)
-pinecone-client>=2.2.0  # Vector database (cloud, optional)
+pinecone>=2.2.0  # Vector database (cloud, optional)
 
 # Document Processing
 pypdf>=3.17.0  # PDF loading

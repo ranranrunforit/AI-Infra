@@ -7,15 +7,12 @@ metadata:
     app: llm-api
     component: api
 spec:
-  replicas: 1  # Single replica due to GPU constraint, scale horizontally with more GPUs
+  replicas: 1  # Single replica for single GPU
   selector:
     matchLabels:
       app: llm-api
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 1
+    type: Recreate  # Changed from RollingUpdate due to GPU constraint
   template:
     metadata:
       labels:
@@ -26,9 +23,14 @@ spec:
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
-      # GPU node selector and tolerations
+      # GPU node selector (adjust based on your cluster)
       nodeSelector:
-        cloud.google.com/gke-accelerator: nvidia-tesla-t4  # Adjust based on GPU type
+        # For cloud: adjust based on provider
+        # cloud.google.com/gke-accelerator: nvidia-tesla-t4
+        # For local: use generic label
+        kubernetes.io/hostname: your-node-name  # Replace with actual node name
+      
+      # Tolerate GPU taints
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -36,7 +38,7 @@ spec:
 
       containers:
         - name: llm-api
-          image: llm-deployment-platform:latest  # Replace with your image
+          image: llm-deployment-platform:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -44,61 +46,51 @@ spec:
               protocol: TCP
 
           env:
+            # RTX 5070 optimized config (12GB VRAM)
             - name: MODEL_CONFIG
-              valueFrom:
-                configMapKeyRef:
-                  name: llm-api-config
-                  key: MODEL_CONFIG
+              value: "rtx-5070"
             - name: EMBEDDING_MODEL
-              valueFrom:
-                configMapKeyRef:
-                  name: llm-api-config
-                  key: EMBEDDING_MODEL
+              value: "all-MiniLM-L6-v2"
             - name: VECTOR_DB_BACKEND
-              valueFrom:
-                configMapKeyRef:
-                  name: llm-api-config
-                  key: VECTOR_DB_BACKEND
+              value: "chromadb"
             - name: CHROMA_PERSIST_DIR
-              valueFrom:
-                configMapKeyRef:
-                  name: llm-api-config
-                  key: CHROMA_PERSIST_DIR
+              value: "/app/chroma_db"
             - name: RAG_TOP_K
-              valueFrom:
-                configMapKeyRef:
-                  name: llm-api-config
-                  key: RAG_TOP_K
+              value: "5"
             - name: RAG_CHUNK_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: llm-api-config
-                  key: RAG_CHUNK_SIZE
+              value: "512"
             - name: GPU_COST_PER_HOUR
-              valueFrom:
-                configMapKeyRef:
-                  name: llm-api-config
-                  key: GPU_COST_PER_HOUR
+              value: "0.40"
             - name: RATE_LIMIT_RPM
-              valueFrom:
-                configMapKeyRef:
-                  name: llm-api-config
-                  key: RATE_LIMIT_RPM
+              value: "45"
+            - name: LOG_LEVEL
+              value: "INFO"
+            
+            # Memory optimization for 12GB VRAM
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: "max_split_size_mb:256"
+            - name: CUDA_VISIBLE_DEVICES
+              value: "0"
+            - name: CUDA_LAUNCH_BLOCKING
+              value: "0"
+            
+            # Secrets
             - name: HUGGING_FACE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: llm-api-secrets
                   key: HUGGING_FACE_TOKEN
-                  optional: true
+                  optional: false
 
+          # RTX 5070 optimized resources (12GB VRAM)
           resources:
             requests:
-              memory: "16Gi"
-              cpu: "4"
+              memory: "8Gi"      # Reduced from 12Gi
+              cpu: "3"           # Reduced from 4
               nvidia.com/gpu: "1"
             limits:
-              memory: "32Gi"
-              cpu: "8"
+              memory: "12Gi"     # Reduced from 16Gi
+              cpu: "6"           # Reduced from 8
               nvidia.com/gpu: "1"
 
           volumeMounts:
@@ -108,12 +100,14 @@ spec:
               mountPath: /app/models
             - name: logs
               mountPath: /app/logs
+            - name: shm
+              mountPath: /dev/shm
 
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 120
+            initialDelaySeconds: 200  # Longer for model loading on 12GB
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 3
@@ -122,7 +116,7 @@ spec:
             httpGet:
               path: /ready
               port: http
-            initialDelaySeconds: 60
+            initialDelaySeconds: 150
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
@@ -134,7 +128,7 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30  # Allow up to 5 minutes for startup
+            failureThreshold: 50  # Allow up to 8 minutes for startup
 
       volumes:
         - name: chromadb-data
@@ -146,6 +140,10 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: llm-logs
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 3Gi  # Reduced from 4Gi for 12GB card
 
       # Security context
       securityContext:

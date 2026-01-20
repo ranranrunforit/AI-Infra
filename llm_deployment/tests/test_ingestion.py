@@ -86,20 +86,50 @@ class TestProcessor:
 class TestIndexer:
     """Test vector indexing."""
 
-    def test_batch_indexing(self, mock_vector_db, sample_chunks, sample_embeddings):
-        """
-        TODO: Test batch indexing
-        - Index documents
-        - Verify upsert called
-        - Check statistics
-        """
-        pass
+    @pytest.mark.asyncio
+    async def test_chroma_indexing(self):
+        """Test ChromaDB indexing logic"""
+        from src.ingestion.indexer import ChromaIndexer, IndexedDocument
+        from unittest.mock import MagicMock
 
-    def test_deduplication(self):
-        """
-        TODO: Test duplicate handling
-        - Index duplicate documents
-        - Verify only one indexed
-        - Check ID generation
-        """
-        pass
+        # Mock ChromaDB client
+        with patch("src.ingestion.indexer.chromadb") as mock_chroma:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_chroma.Client.return_value = mock_client
+            mock_client.get_or_create_collection.return_value = mock_collection
+
+            indexer = ChromaIndexer(collection_name="test")
+            
+            docs = [
+                IndexedDocument(text="hello", embedding=[0.1]*768, metadata={"id": 1}),
+                IndexedDocument(text="world", embedding=[0.2]*768, metadata={"id": 2})
+            ]
+
+            await indexer.index_documents(docs)
+
+            # Verify upsert (add) was called with correct data
+            mock_collection.upsert.assert_called_once()
+            call_args = mock_collection.upsert.call_args[1]
+            assert len(call_args["ids"]) == 2
+            assert len(call_args["embeddings"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_optimization_batching(self):
+        """Test that indexing handles batching correctly"""
+        from src.ingestion.indexer import ChromaIndexer, IndexedDocument
+        
+        with patch("src.ingestion.indexer.chromadb") as mock_chroma:
+            mock_collection = MagicMock()
+            mock_chroma.Client.return_value.get_or_create_collection.return_value = mock_collection
+            
+            # Batch size 2
+            indexer = ChromaIndexer(collection_name="test", batch_size=2)
+            
+            # 5 docs -> should be 3 batches (2, 2, 1)
+            docs = [IndexedDocument(text=f"doc{i}", embedding=[0.1]*768) for i in range(5)]
+            
+            await indexer.index_documents(docs)
+            
+            assert mock_collection.upsert.call_count == 3
+
