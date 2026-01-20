@@ -31,4 +31,4 @@ Airflow, MLflow, Kubernetes, Prometheus, Grafana, Docker, DVC
 
 **[LLM Deployment Platform](./llm_deployment)**
 
-vLLM, RAG, Vector DB
+vLLM, RAG, Vector DB, Kubernetes, Prometheus, Grafana, Docker
