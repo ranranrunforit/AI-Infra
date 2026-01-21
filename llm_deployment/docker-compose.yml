@@ -12,7 +12,7 @@ services:
       - "8000:8000"
     environment:
       # RTX 5070 optimized settings (12GB VRAM)
-      - MODEL_CONFIG=rtx-5070
+      - MODEL_CONFIG=rtx-5070-tiny
       - EMBEDDING_MODEL=all-MiniLM-L6-v2
       - VECTOR_DB_BACKEND=chromadb
       - CHROMA_PERSIST_DIR=/app/chroma_db
@@ -22,10 +22,25 @@ services:
       - GPU_COST_PER_HOUR=0.40
       - RATE_LIMIT_RPM=45
       - LOG_LEVEL=INFO
+
+      # VLLM Memory Fix: Limits VLLM to 70% of VRAM to leave room for Windows/WSL
+      - VLLM_GPU_MEMORY_UTILIZATION=0.7
+      # ADD THESE TWO LINES:
+      # - VLLM_ENFORCE_EAGER=1
+      # - VLLM_TORCH_COMPILE_LEVEL=None
+
+      # Add these:
+      - VLLM_ATTENTION_BACKEND=XFORMERS
+      - VLLM_ENFORCE_EAGER=1
+      - VLLM_USE_V1=0
+      - VLLM_TORCH_COMPILE_LEVEL=0
+      - CUDA_MODULE_LOADING=LAZY
+
       # Memory optimization for 12GB VRAM
       - PYTORCH_ALLOC_CONF=max_split_size_mb:256
       - CUDA_VISIBLE_DEVICES=0
       - CUDA_LAUNCH_BLOCKING=0
+      
       # Add your Hugging Face token here
       - HUGGING_FACE_TOKEN=${HUGGING_FACE_TOKEN}
     volumes:

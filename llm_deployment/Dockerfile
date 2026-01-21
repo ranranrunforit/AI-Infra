@@ -2,7 +2,7 @@
 # Supports both GPU and CPU deployments
 
 # Stage 1: Base image with CUDA support
-FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04 as base
+FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04 as base
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
