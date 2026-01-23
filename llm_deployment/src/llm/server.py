@@ -88,28 +88,48 @@ class LLMServer:
             raise
 
     async def _initialize_vllm(self):
-        """Initialize vLLM engine"""
-        logger.info("Initializing vLLM engine...")
+    """Initialize vLLM engine"""
+    import os
+    logger.info("Initializing vLLM engine...")
 
-        engine_args = AsyncEngineArgs(
-            model=self.config.model_name,
-            tokenizer=self.config.tokenizer_name or self.config.model_name,
-            dtype=self.config.dtype,
-            quantization=self.config.quantization,
-            max_model_len=self.config.max_model_len,
-            gpu_memory_utilization=self.config.gpu_memory_utilization,
-            trust_remote_code=self.config.trust_remote_code,
-            download_dir=self.config.cache_dir,
-            tensor_parallel_size=self.config.tensor_parallel_size,
-        )
+    # Read environment variables for CUDA 12.8 compatibility
+    enforce_eager = os.getenv('VLLM_ENFORCE_EAGER', '0') == '1'
+    attention_backend = os.getenv('VLLM_ATTENTION_BACKEND', None)
+    gpu_memory_util = float(os.getenv('VLLM_GPU_MEMORY_UTILIZATION', 
+                                      str(self.config.gpu_memory_utilization)))
+    
+    logger.info(f"CUDA Compatibility Settings:")
+    logger.info(f"  - enforce_eager: {enforce_eager}")
+    logger.info(f"  - attention_backend: {attention_backend}")
+    logger.info(f"  - gpu_memory_utilization: {gpu_memory_util}")
 
-        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.config.tokenizer_name or self.config.model_name,
-            cache_dir=self.config.cache_dir,
-        )
+    engine_args = AsyncEngineArgs(
+        model=self.config.model_name,
+        tokenizer=self.config.tokenizer_name or self.config.model_name,
+        dtype=self.config.dtype,
+        quantization=self.config.quantization,
+        max_model_len=self.config.max_model_len,
+        gpu_memory_utilization=gpu_memory_util,  # Use env var
+        trust_remote_code=self.config.trust_remote_code,
+        download_dir=self.config.cache_dir,
+        tensor_parallel_size=self.config.tensor_parallel_size,
+        
+        # CRITICAL: CUDA 12.8 compatibility fixes
+        enforce_eager=enforce_eager,  # Disable CUDA graphs
+        disable_custom_all_reduce=True,  # Disable custom kernels
+    )
+    
+    # Set attention backend via environment if specified
+    if attention_backend:
+        os.environ['VLLM_ATTENTION_BACKEND'] = attention_backend
 
-        logger.info("vLLM engine initialized")
+    self.engine = AsyncLLMEngine.from_engine_args(engine_args)
+    self.tokenizer = AutoTokenizer.from_pretrained(
+        self.config.tokenizer_name or self.config.model_name,
+        cache_dir=self.config.cache_dir,
+    )
+
+    logger.info("vLLM engine initialized")
 
     async def _initialize_transformers(self):
         """Initialize transformers model (fallback)"""

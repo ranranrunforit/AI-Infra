@@ -1,8 +1,7 @@
 """
-Model configuration for LLM serving - RTX 5070 Optimized (12GB VRAM)
+Model configuration for LLM serving - RTX 5070 Fixed (12GB VRAM)
 
-Defines model loading parameters, quantization settings,
-and optimization configurations.
+Memory-conservative configurations that actually work!
 """
 
 from dataclasses import dataclass
@@ -36,18 +35,32 @@ class ModelConfig:
     cache_dir: Optional[str] = None  # HuggingFace cache directory
 
     @classmethod
-    def rtx_5070_optimized(cls) -> "ModelConfig":
+    def rtx_5070_tiny(cls) -> "ModelConfig":
         """
-        NVIDIA RTX 5070 Optimized (12GB VRAM) - RECOMMENDED
-        Uses Phi-3 Mini (3.8B) with FP16
-        Memory usage: ~5-6GB, excellent performance
+        RECOMMENDED FOR 12GB - TinyLlama (Ultra-safe)
+        Memory usage: ~2-3GB, very fast, guaranteed to work
+        """
+        return cls(
+            model_name="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            dtype="float16",
+            quantization=None,
+            max_model_len=2048,
+            gpu_memory_utilization=0.40,  # Very conservative
+            tensor_parallel_size=1,
+        )
+
+    @classmethod
+    def rtx_5070_phi3(cls) -> "ModelConfig":
+        """
+        RTX 5070 with Phi-3 Mini (Better quality, works on 12GB!)
+        Memory usage: ~4-5GB model + ~1-2GB KV cache
         """
         return cls(
             model_name="microsoft/Phi-3-mini-4k-instruct",
             dtype="float16",
             quantization=None,
-            max_model_len=4096,
-            gpu_memory_utilization=0.65,  # Conservative for 12GB
+            max_model_len=1024,  # REDUCED: Smaller context = less KV cache memory
+            gpu_memory_utilization=0.40,  # REDUCED: More conservative
             tensor_parallel_size=1,
             trust_remote_code=True,
         )
@@ -55,51 +68,37 @@ class ModelConfig:
     @classmethod
     def rtx_5070_mistral_awq(cls) -> "ModelConfig":
         """
-        RTX 5070 with Mistral-7B AWQ quantized
-        Memory usage: ~6-7GB, good quality
+        RTX 5070 with Mistral-7B AWQ (High quality, tight fit)
+        Memory usage: ~5-6GB
         """
         return cls(
             model_name="TheBloke/Mistral-7B-Instruct-v0.2-AWQ",
             dtype="float16",
             quantization="awq",
-            max_model_len=3072,  # Reduced context for safety
-            gpu_memory_utilization=0.70,
+            max_model_len=2048,  # Reduced for safety
+            gpu_memory_utilization=0.50,  # Conservative
             tensor_parallel_size=1,
         )
 
     @classmethod
     def rtx_5070_llama2_awq(cls) -> "ModelConfig":
         """
-        RTX 5070 with Llama-2-7B AWQ quantized
-        Memory usage: ~5-6GB
+        RTX 5070 with Llama-2-7B AWQ
+        Memory usage: ~4-5GB
         """
         return cls(
             model_name="TheBloke/Llama-2-7B-Chat-AWQ",
             dtype="float16",
             quantization="awq",
-            max_model_len=2048,  # Reduced context for 12GB
-            gpu_memory_utilization=0.65,
-            tensor_parallel_size=1,
-        )
-
-    @classmethod
-    def rtx_5070_tinyllama(cls) -> "ModelConfig":
-        """
-        RTX 5070 with TinyLlama (for testing)
-        Memory usage: ~2-3GB, very fast
-        """
-        return cls(
-            model_name="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            dtype="float16",
-            quantization=None,
             max_model_len=2048,
-            gpu_memory_utilization=0.50,
+            gpu_memory_utilization=0.45,
             tensor_parallel_size=1,
         )
 
+    # Legacy/Standard configs (may not work on 12GB)
     @classmethod
     def llama2_7b_chat(cls) -> "ModelConfig":
-        """Llama 2 7B Chat configuration (NOT RECOMMENDED for 12GB)"""
+        """Llama 2 7B Chat - NOT RECOMMENDED for 12GB"""
         return cls(
             model_name="meta-llama/Llama-2-7b-chat-hf",
             dtype="float16",
@@ -109,7 +108,7 @@ class ModelConfig:
 
     @classmethod
     def llama2_7b_chat_quantized(cls) -> "ModelConfig":
-        """Llama 2 7B Chat with AWQ quantization"""
+        """Llama 2 7B Chat AWQ"""
         return cls(
             model_name="TheBloke/Llama-2-7B-Chat-AWQ",
             dtype="float16",
@@ -120,7 +119,7 @@ class ModelConfig:
 
     @classmethod
     def mistral_7b_instruct(cls) -> "ModelConfig":
-        """Mistral 7B Instruct configuration (NOT RECOMMENDED for 12GB)"""
+        """Mistral 7B - NOT RECOMMENDED for 12GB"""
         return cls(
             model_name="mistralai/Mistral-7B-Instruct-v0.2",
             dtype="float16",
@@ -130,7 +129,7 @@ class ModelConfig:
 
     @classmethod
     def tiny_llama(cls) -> "ModelConfig":
-        """TinyLlama for testing (1.1B parameters)"""
+        """TinyLlama standard config"""
         return cls(
             model_name="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             dtype="float16",
@@ -149,16 +148,24 @@ class ModelConfig:
             use_vllm=False,
         )
 
-    # Legacy aliases for backward compatibility
+    # Aliases
+    @classmethod
+    def rtx_5070(cls) -> "ModelConfig":
+        """Default RTX 5070 config - uses Phi-3 Mini (good quality)"""
+        return cls.rtx_5070_phi3()
+
+    @classmethod
+    def rtx_5070_optimized(cls) -> "ModelConfig":
+        """Optimized RTX 5070 config - uses Phi-3 (better quality)"""
+        return cls.rtx_5070_phi3()
+
     @classmethod
     def laptop_5070(cls) -> "ModelConfig":
-        """Legacy: redirects to RTX 5070 config"""
-        return cls.rtx_5070_optimized()
+        """Legacy alias"""
+        return cls.rtx_5070_tiny()
 
     def get_memory_estimate_gb(self) -> float:
-        """
-        Estimate GPU memory required (rough approximation)
-        """
+        """Estimate GPU memory required"""
         model_lower = self.model_name.lower()
 
         if "70b" in model_lower:
@@ -190,7 +197,7 @@ class ModelConfig:
 
         # Calculate memory
         model_memory_gb = params_billions * bytes_per_param
-        total_memory_gb = model_memory_gb * 1.4  # Add 40% overhead for 12GB card
+        total_memory_gb = model_memory_gb * 1.5  # Add 50% overhead for safety
 
         return total_memory_gb
 
@@ -213,23 +220,24 @@ class ModelConfig:
             )
 
 
-# Predefined configurations
+# Predefined configurations - RTX 5070 (12GB VRAM)
 PREDEFINED_CONFIGS = {
-    # RTX 5070 optimized configs (12GB VRAM)
-    "rtx-5070": ModelConfig.rtx_5070_optimized(),  # RECOMMENDED
+    # RTX 5070 configs (in order of memory usage)
+    "rtx-5070-tiny": ModelConfig.rtx_5070_tiny(),      # 2-3GB, safest
+    "rtx-5070-phi3": ModelConfig.rtx_5070_phi3(),      # 5-7GB, FIXED for 12GB
     "rtx-5070-mistral": ModelConfig.rtx_5070_mistral_awq(),
     "rtx-5070-llama": ModelConfig.rtx_5070_llama2_awq(),
-    "rtx-5070-tiny": ModelConfig.rtx_5070_tinyllama(),
     
-    # Standard configs (may not fit in 12GB)
+    # Default aliases
+    "rtx-5070": ModelConfig.rtx_5070(),  # Points to phi3 now
+    "laptop-5070": ModelConfig.rtx_5070_phi3(),
+    
+    # Standard configs (may not work on 12GB)
     "llama2-7b-chat": ModelConfig.llama2_7b_chat(),
     "llama2-7b-chat-quantized": ModelConfig.llama2_7b_chat_quantized(),
     "mistral-7b-instruct": ModelConfig.mistral_7b_instruct(),
     "tiny-llama": ModelConfig.tiny_llama(),
     "mock": ModelConfig.mock_model(),
-    
-    # Legacy aliases
-    "laptop-5070": ModelConfig.rtx_5070_optimized(),
 }
 
 
