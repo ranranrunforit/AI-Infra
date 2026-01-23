@@ -41,8 +41,8 @@ scrape_configs:
   # Redis
   - job_name: 'redis'
     static_configs:
-      - targets: ['redis:6379']
-
+      # - targets: ['redis:6379']
+      - targets: ['redis-exporter:9121']  # Changed from redis:6379
   # cAdvisor (if actually included in compose, otherwise remove)
   # - job_name: 'cadvisor'
   #   static_configs:
