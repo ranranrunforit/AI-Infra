@@ -47,6 +47,9 @@ docker-compose logs -f llm-api
 # Stop services
 docker-compose down
 
+# Health Check
+curl http://localhost:8000/health
+
 # Testing Text Generation
 $body = @{
     prompt = "Explain what is machine learning in one sentence:"
