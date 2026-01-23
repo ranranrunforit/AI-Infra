@@ -23,22 +23,24 @@ services:
       - RATE_LIMIT_RPM=45
       - LOG_LEVEL=INFO
 
-      # VLLM Memory Fix: Limits VLLM to 70% of VRAM to leave room for Windows/WSL
-      - VLLM_GPU_MEMORY_UTILIZATION=0.7
-      # ADD THESE TWO LINES:
-      # - VLLM_ENFORCE_EAGER=1
-      # - VLLM_TORCH_COMPILE_LEVEL=None
-
-      # Add these:
-      - VLLM_ATTENTION_BACKEND=XFORMERS
-      - VLLM_ENFORCE_EAGER=1
+      # CRITICAL: Force V0 engine (stable, works with RTX 5070)
       - VLLM_USE_V1=0
-      - VLLM_TORCH_COMPILE_LEVEL=0
-      - CUDA_MODULE_LOADING=LAZY
+      - VLLM_GPU_MEMORY_UTILIZATION=0.5 
+      # - VLLM_ATTENTION_BACKEND=FLASHINFER
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
 
-      # Memory optimization for 12GB VRAM
-      - PYTORCH_ALLOC_CONF=max_split_size_mb:256
+      # CRITICAL: These MUST be in your application code, not just env vars
+      # The env vars alone don't work - you need to pass them to vLLM's engine
+      - VLLM_ENFORCE_EAGER=1
+      
+      # Disable problematic features
+      - VLLM_TORCH_COMPILE_LEVEL=0
+      - PYTORCH_ALLOC_CONF=expandable_segments:True
+      
+      # Memory optimization
       - CUDA_VISIBLE_DEVICES=0
+      - CUDA_MODULE_LOADING=LAZY
+      - PYTORCH_ALLOC_CONF=max_split_size_mb:256
       - CUDA_LAUNCH_BLOCKING=0
       
       # Add your Hugging Face token here
