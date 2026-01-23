@@ -71,6 +71,11 @@ Invoke-RestMethod -Uri "http://localhost:8000/generate" `
     max_tokens = 50
     temperature = 0.7
   } | ConvertTo-Json)
+
+# Access monitoring at:"
+# API Docs: http://localhost:8000/docs
+# Prometheus: http://localhost:9090
+# Grafana: http://localhost:3000 (admin/admin)
 ```
 
 ### Kubernetes Deployment
