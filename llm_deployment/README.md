@@ -46,6 +46,27 @@ docker-compose logs -f llm-api
 
 # Stop services
 docker-compose down
+
+# Testing Text Generation
+$body = @{
+    prompt = "Explain what is machine learning in one sentence:"
+    max_tokens = 50
+    temperature = 0.7
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:8000/generate" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Body $body
+
+Invoke-RestMethod -Uri "http://localhost:8000/generate" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body (@{
+    prompt = "Explain what is machine learning in one sentence:"
+    max_tokens = 50
+    temperature = 0.7
+  } | ConvertTo-Json)
 ```
 
 ### Kubernetes Deployment
