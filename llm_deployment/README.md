@@ -62,6 +62,7 @@ Invoke-RestMethod -Uri "http://localhost:8000/generate" `
     -ContentType "application/json" `
     -Body $body
 
+# Testing Text Generation one-liner
 Invoke-RestMethod -Uri "http://localhost:8000/generate" `
   -Method Post `
   -ContentType "application/json" `
