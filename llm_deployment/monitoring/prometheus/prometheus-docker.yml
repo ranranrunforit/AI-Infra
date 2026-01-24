@@ -1,0 +1,56 @@
+# Prometheus configuration for Docker Compose environment
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'llm-platform-docker'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            # - alertmanager:9093
+            []
+
+# Load rules
+rule_files:
+  - 'alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # LLM API metrics
+  - job_name: 'llm-api'
+    static_configs:
+      - targets: ['llm-api:8000']
+    metrics_path: /metrics
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ChromaDB
+  # - job_name: 'chromadb'
+  #   static_configs:
+  #     - targets: ['chromadb:8000']
+  #   metrics_path: /metrics
+
+  # ChromaDB via custom exporter
+  - job_name: 'chromadb'
+    static_configs:
+      - targets: ['chromadb-exporter:9091']
+    metrics_path: /metrics
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      # - targets: ['redis:6379']
+      - targets: ['redis-exporter:9121']  # Changed from redis:6379
+  
+  # cAdvisor (if actually included in compose, otherwise remove)
+  # - job_name: 'cadvisor'
+  #   static_configs:
+  #     - targets: ['cadvisor:8080']
