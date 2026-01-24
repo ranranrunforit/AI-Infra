@@ -69,13 +69,33 @@ services:
       start_period: 150s  # Allow more time for smaller card
     restart: unless-stopped
     shm_size: '3gb'  # Shared memory for PyTorch (reduced from 4gb)
-
+  
+  # === ADD THIS NEW SERVICE ===
+  # ChromaDB Exporter
+  chromadb-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile.chromadb-exporter
+    container_name: chromadb-exporter
+    environment:
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - EXPORTER_PORT=9091
+      - SCRAPE_INTERVAL=15
+    ports:
+      - "9091:9091"
+    depends_on:
+      - chromadb
+    networks:
+      - llm-network
+    restart: unless-stopped
+    
   # ChromaDB (vector database)
   chromadb:
     image: chromadb/chroma:latest
     container_name: chromadb
     ports:
-      - "8001:8000"
+      - "8001:8001"
     environment:
       - IS_PERSISTENT=TRUE
       - PERSIST_DIRECTORY=/chroma/chroma
@@ -147,6 +167,21 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+# === ADD THIS NEW SERVICE ===
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    ports:
+      - "9121:9121"
+    networks:
+      - llm-network
+    depends_on:
+      - redis
+    restart: unless-stopped
+  # ============================
 
 networks:
   llm-network:

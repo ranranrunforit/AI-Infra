@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install only minimal dependencies (no chromadb client needed)
+RUN pip install --no-cache-dir \
+    prometheus-client==0.19.0 \
+    requests==2.31.0
+
+# Copy exporter script
+COPY chromadb_exporter.py .
+
+# Expose metrics port
+EXPOSE 9091
+
+# Run exporter
+CMD ["python", "-u", "chromadb_exporter.py"]
