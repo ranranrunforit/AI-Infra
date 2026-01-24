@@ -36,3 +36,5 @@ pytest>=7.4.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
 httpx>=0.25.0  # Async HTTP client for testing
+
+pynvml>=11.5.0  # NVIDIA Management Library for GPU metrics
