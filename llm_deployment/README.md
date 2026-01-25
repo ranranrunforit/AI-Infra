@@ -81,6 +81,145 @@ Invoke-RestMethod -Uri "http://localhost:8000/generate" `
 ### Kubernetes Deployment
 
 ```bash
+
+# Running the Project in Kubernetes
+
+## Prerequisites
+
+First, make sure you have:
+
+# Check if kubectl is installed
+kubectl version --client
+
+# Check if you have a Kubernetes cluster
+kubectl cluster-info
+
+# For local testing, you can use minikube or kind
+minikube start --driver=docker --cpus=4 --memory=16384
+# OR
+kind create cluster --name llm-cluster
+
+
+## Step-by-Step Deployment
+
+### 1. Build and Push Docker Image
+
+# Build the Docker image
+docker build -t llm-deployment-platform:latest .
+
+# If deploying to a real cluster, tag and push to a registry
+# For Docker Hub:
+docker tag llm-deployment-platform:latest your-dockerhub-username/llm-deployment-platform:latest
+docker push your-dockerhub-username/llm-deployment-platform:latest
+
+# For local Kubernetes (minikube), load the image directly:
+minikube image load llm-deployment-platform:latest
+
+# For kind:
+kind load docker-image llm-deployment-platform:latest --name llm-cluster
+
+
+### 2. Create Secrets
+
+**Important**: Never commit secrets to Git! Create them manually:
+
+Step 1: Create the Namespace
+Since your initial command tried to use llm-platform, let’s create that one:
+
+kubectl create namespace llm-platform
+
+Step 2: Create the Secret
+Now that the namespace exists, your original command will work:
+
+kubectl create secret generic llm-api-secrets `
+  --from-literal=HUGGING_FACE_TOKEN=your-actual-token-here `
+  --from-literal=PINECONE_API_KEY=your-key-if-using-pinecone `
+  -n llm-platform
+
+# Create the secrets
+kubectl create secret generic llm-api-secrets \
+  --from-literal=HUGGING_FACE_TOKEN=your-actual-token-here \
+  --from-literal=PINECONE_API_KEY=your-key-if-using-pinecone \
+  -n llm-platform
+
+# Verify the secret was created
+kubectl get secrets -n llm-platform
+
+
+### 3. Deploy to Kubernetes
+Now deploy all components in order:
+
+# 1. Create namespace
+kubectl apply -f kubernetes/namespace.yaml
+
+# 2. Create ConfigMap
+kubectl apply -f kubernetes/configmap.yaml
+
+# 3. Create Secrets (if not done via kubectl create above)
+# kubectl apply -f kubernetes/secret.yaml  # Only if you've filled it in
+
+# 4. Create Persistent Volume Claims
+kubectl apply -f kubernetes/pvc.yaml
+
+# 5. Deploy the application
+kubectl apply -f kubernetes/deployment.yaml
+
+# 6. Create services
+kubectl apply -f kubernetes/service.yaml
+
+# 7. (Optional) Create HPA for auto-scaling
+kubectl apply -f kubernetes/hpa.yaml
+
+
+### 4. Verify Deployment
+# Check if pods are running
+kubectl get pods -n llm-platform -w
+
+# Check pod logs
+kubectl logs -f deployment/llm-api -n llm-platform
+
+# Check service status
+kubectl get svc -n llm-platform
+
+# Describe pod to see events
+kubectl describe pod -l app=llm-api -n llm-platform
+
+
+### 5. Access the API
+Depending on your setup:
+**For Minikube:**
+
+# Get the service URL
+minikube service llm-api-external -n llm-platform --url
+
+# Or use port forwarding
+kubectl port-forward -n llm-platform svc/llm-api 8000:8000
+
+
+**For Kind or other local K8s:**
+# Use port forwarding
+kubectl port-forward -n llm-platform svc/llm-api 8000:8000
+
+**For Cloud Kubernetes (GKE, EKS, AKS):**
+# Get the external IP (may take a few minutes)
+kubectl get svc llm-api-external -n llm-platform
+
+# Once you have EXTERNAL-IP, access via:
+# http://<EXTERNAL-IP>/docs
+
+### 6. Test the API
+# Health check
+curl http://localhost:8000/health
+
+# Test prediction
+curl -X POST "http://localhost:8000/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "What is machine learning?",
+    "max_tokens": 100
+  }'
+
+
 # Apply manifests
 kubectl apply -f kubernetes/namespace.yaml
 kubectl apply -f kubernetes/configmap.yaml
