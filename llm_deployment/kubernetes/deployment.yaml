@@ -28,7 +28,7 @@ spec:
         # For cloud: adjust based on provider
         # cloud.google.com/gke-accelerator: nvidia-tesla-t4
         # For local: use generic label
-        kubernetes.io/hostname: your-node-name  # Replace with actual node name
+        kubernetes.io/hostname: minikube  # Replace with actual node name
       
       # Tolerate GPU taints
       tolerations:
