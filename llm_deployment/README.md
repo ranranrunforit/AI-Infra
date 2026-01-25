@@ -86,8 +86,6 @@ Invoke-RestMethod -Uri "http://localhost:8000/generate" `
 
 ## Prerequisites
 
-First, make sure you have:
-
 # Check if kubectl is installed
 kubectl version --client
 
@@ -124,13 +122,9 @@ kind load docker-image llm-deployment-platform:latest --name llm-cluster
 **Important**: Never commit secrets to Git! Create them manually:
 
 # Step 1: Create the Namespace
-Since your initial command tried to use llm-platform, let’s create that one:
-
 kubectl create namespace llm-platform
 
 # Step 2: Create the Secret
-Now that the namespace exists, your original command will work:
-
 kubectl create secret generic llm-api-secrets `
   --from-literal=HUGGING_FACE_TOKEN=your-actual-token-here `
   --from-literal=PINECONE_API_KEY=your-key-if-using-pinecone `
@@ -180,7 +174,7 @@ kubectl describe pod -l app=llm-api -n llm-platform
 
 
 ### 5. Access the API
-Depending on your setup:
+
 **For Minikube:**
 
 # Get the service URL
