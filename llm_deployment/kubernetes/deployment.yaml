@@ -82,6 +82,13 @@ spec:
                   key: HUGGING_FACE_TOKEN
                   optional: false
 
+            # Add the missing Pinecone key from your secret
+            - name: PINECONE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-api-secrets
+                  key: PINECONE_API_KEY
+
           # RTX 5070 optimized resources (12GB VRAM)
           resources:
             requests:
