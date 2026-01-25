@@ -123,23 +123,17 @@ kind load docker-image llm-deployment-platform:latest --name llm-cluster
 
 **Important**: Never commit secrets to Git! Create them manually:
 
-Step 1: Create the Namespace
+# Step 1: Create the Namespace
 Since your initial command tried to use llm-platform, let’s create that one:
 
 kubectl create namespace llm-platform
 
-Step 2: Create the Secret
+# Step 2: Create the Secret
 Now that the namespace exists, your original command will work:
 
 kubectl create secret generic llm-api-secrets `
   --from-literal=HUGGING_FACE_TOKEN=your-actual-token-here `
   --from-literal=PINECONE_API_KEY=your-key-if-using-pinecone `
-  -n llm-platform
-
-# Create the secrets
-kubectl create secret generic llm-api-secrets \
-  --from-literal=HUGGING_FACE_TOKEN=your-actual-token-here \
-  --from-literal=PINECONE_API_KEY=your-key-if-using-pinecone \
   -n llm-platform
 
 # Verify the secret was created
