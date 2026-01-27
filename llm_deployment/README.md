@@ -93,7 +93,7 @@ kubectl version --client
 kubectl cluster-info
 
 # For local testing, you can use minikube or kind
-minikube start --driver=docker --container-runtime=docker --gpus=all --memory=15544 --cpus=4
+minikube start --driver=docker --container-runtime=docker --gpus=all --memory=16384 --cpus=4
 # OR
 kind create cluster --name llm-cluster
 
