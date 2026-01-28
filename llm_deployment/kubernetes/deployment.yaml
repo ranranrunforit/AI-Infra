@@ -144,14 +144,25 @@ spec:
                   key: PINECONE_API_KEY
 
           # RTX 5070 optimized resources (12GB VRAM)
+          # resources:
+          #   requests:
+          #     memory: "6Gi"      # Reduced from 12Gi
+          #     cpu: "3"           # Reduced from 4
+          #     nvidia.com/gpu: "1"
+          #   limits:
+          #     memory: "11Gi"     # Reduced from 16Gi
+          #     cpu: "6"           # Reduced from 8
+          #     nvidia.com/gpu: "1"
+
+          # Reduced resources for TinyLlama
           resources:
             requests:
-              memory: "6Gi"      # Reduced from 12Gi
-              cpu: "3"           # Reduced from 4
+              memory: "6Gi"
+              cpu: "3"
               nvidia.com/gpu: "1"
             limits:
-              memory: "11Gi"     # Reduced from 16Gi
-              cpu: "6"           # Reduced from 8
+              memory: "10Gi"
+              cpu: "6"
               nvidia.com/gpu: "1"
 
           volumeMounts:
@@ -164,11 +175,12 @@ spec:
             - name: shm
               mountPath: /dev/shm
 
+          # TinyLlama takes 2-5 minutes to load with vLLM
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 200  # Longer for model loading on 12GB
+            initialDelaySeconds: 420   # 7 minutes - wait for model to load
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 3
@@ -177,18 +189,19 @@ spec:
             httpGet:
               path: /ready
               port: http
-            initialDelaySeconds: 150
+            initialDelaySeconds: 360 # 6 minutes
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
 
+          # MOST IMPORTANT: Startup probe with LONG timeout
           startupProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
+            initialDelaySeconds: 60  # Wait 1 minute before first check
+            periodSeconds: 20  # Check every 20 seconds
+            timeoutSeconds: 10  # 10 second timeout per check
             failureThreshold: 50  # Allow up to 8 minutes for startup
 
       volumes:

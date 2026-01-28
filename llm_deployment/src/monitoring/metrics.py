@@ -23,13 +23,6 @@ from prometheus_client import (
 )
 import psutil
 
-try:
-    import pynvml
-    NVML_AVAILABLE = True
-except ImportError:
-    NVML_AVAILABLE = False
-    logging.warning("pynvml not available, GPU metrics will not be collected")
-
 logger = logging.getLogger(__name__)
 
 
@@ -46,17 +39,6 @@ class MetricsCollector:
             model_name: Name of the model for labeling
         """
         self.model_name = model_name
-
-        # Initialize GPU monitoring if available
-        self.gpu_available = False
-        if NVML_AVAILABLE:
-            try:
-                pynvml.nvmlInit()
-                self.gpu_available = True
-                self.gpu_count = pynvml.nvmlDeviceGetCount()
-                logger.info(f"GPU monitoring initialized ({self.gpu_count} GPUs)")
-            except Exception as e:
-                logger.warning(f"Failed to initialize GPU monitoring: {e}")
 
         # Request metrics
         self.request_counter = Counter(
@@ -95,31 +77,6 @@ class MetricsCollector:
             "llm_tokens_per_second",
             "Current token generation rate",
             ["model"],
-        )
-
-        # GPU metrics
-        self.gpu_utilization = Gauge(
-            "llm_gpu_utilization_percent",
-            "GPU utilization percentage",
-            ["gpu_id"],
-        )
-
-        self.gpu_memory_used = Gauge(
-            "llm_gpu_memory_used_bytes",
-            "GPU memory used in bytes",
-            ["gpu_id"],
-        )
-
-        self.gpu_memory_total = Gauge(
-            "llm_gpu_memory_total_bytes",
-            "Total GPU memory in bytes",
-            ["gpu_id"],
-        )
-
-        self.gpu_temperature = Gauge(
-            "llm_gpu_temperature_celsius",
-            "GPU temperature in Celsius",
-            ["gpu_id"],
         )
 
         # Cost metrics
@@ -290,7 +247,6 @@ class MetricsCollector:
             Metrics in Prometheus text format
         """
         # Update metrics before returning
-        self.update_gpu_metrics()
         self.update_system_metrics()
 
         return generate_latest(REGISTRY)
