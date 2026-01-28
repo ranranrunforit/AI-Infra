@@ -47,24 +47,78 @@ spec:
 
           env:
             # RTX 5070 optimized config (12GB VRAM)
+            # - name: MODEL_CONFIG
+            #   value: "rtx-5070"
+            # - name: EMBEDDING_MODEL
+            #   value: "all-MiniLM-L6-v2"
+            # - name: VECTOR_DB_BACKEND
+            #   value: "chromadb"
+            # - name: CHROMA_PERSIST_DIR
+            #   value: "/app/chroma_db"
+            # - name: RAG_TOP_K
+            #   value: "5"
+            # - name: RAG_CHUNK_SIZE
+            #   value: "512"
+            # - name: GPU_COST_PER_HOUR
+            #   value: "0.40"
+            # - name: RATE_LIMIT_RPM
+            #   value: "45"
+            # - name: LOG_LEVEL
+            #   value: "INFO" 
+            # CHANGED: Use ConfigMap for MODEL_CONFIG instead of hardcoding
             - name: MODEL_CONFIG
-              value: "rtx-5070"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: MODEL_CONFIG
+            
             - name: EMBEDDING_MODEL
-              value: "all-MiniLM-L6-v2"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: EMBEDDING_MODEL
+            
             - name: VECTOR_DB_BACKEND
-              value: "chromadb"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: VECTOR_DB_BACKEND
+            
             - name: CHROMA_PERSIST_DIR
-              value: "/app/chroma_db"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: CHROMA_PERSIST_DIR
+            
             - name: RAG_TOP_K
-              value: "5"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: RAG_TOP_K
+            
             - name: RAG_CHUNK_SIZE
-              value: "512"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: RAG_CHUNK_SIZE
+            
             - name: GPU_COST_PER_HOUR
-              value: "0.40"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: GPU_COST_PER_HOUR
+            
             - name: RATE_LIMIT_RPM
-              value: "45"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: RATE_LIMIT_RPM
+            
             - name: LOG_LEVEL
-              value: "INFO"
+              valueFrom:
+                configMapKeyRef:
+                  name: llm-api-config
+                  key: LOG_LEVEL
             
             # Memory optimization for 12GB VRAM
             - name: PYTORCH_CUDA_ALLOC_CONF
@@ -92,11 +146,11 @@ spec:
           # RTX 5070 optimized resources (12GB VRAM)
           resources:
             requests:
-              memory: "8Gi"      # Reduced from 12Gi
+              memory: "6Gi"      # Reduced from 12Gi
               cpu: "3"           # Reduced from 4
               nvidia.com/gpu: "1"
             limits:
-              memory: "12Gi"     # Reduced from 16Gi
+              memory: "11Gi"     # Reduced from 16Gi
               cpu: "6"           # Reduced from 8
               nvidia.com/gpu: "1"
 
