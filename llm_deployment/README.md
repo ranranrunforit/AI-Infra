@@ -120,7 +120,7 @@ kind load docker-image llm-deployment-platform:latest --name llm-cluster
 
 ### 2. Create Secrets
 
-# **Important**: Never commit secrets to Git! Create them manually:
+# **Important**: Never commit secrets to Git! Create them manually
 
 # Step 1: Create the Namespace
 kubectl create namespace llm-platform
@@ -136,7 +136,7 @@ kubectl get secrets -n llm-platform
 
 
 ### 3. Deploy to Kubernetes
-Now deploy all components in order:
+# Now deploy all components in order
 
 # 1. Create namespace
 kubectl apply -f kubernetes/namespace.yaml
