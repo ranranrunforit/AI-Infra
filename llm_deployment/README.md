@@ -101,7 +101,7 @@ kind create cluster --name llm-cluster
 # Enable the GPU Addon
 minikube addons enable nvidia-device-plugin
 minikube addons enable nvidia-gpu-device-plugin  # Try this alternative too
-
+minikube addons enable metrics-server
 
 
 ## Step-by-Step Deployment
