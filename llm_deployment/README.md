@@ -98,6 +98,9 @@ minikube start --driver=docker --container-runtime=docker --gpus=all --memory=18
 # OR
 kind create cluster --name llm-cluster
 
+# Enable the GPU Addon
+minikube addons enable nvidia-device-plugin
+
 
 ## Step-by-Step Deployment
 
