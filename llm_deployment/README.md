@@ -267,7 +267,7 @@ max_tokens = 100
 
 
 
-# 7. Typical Workflow
+### 7. Typical Workflow
 # First time:
 # 1. Build image
 docker build -t llm-deployment-platform:latest .
@@ -347,7 +347,7 @@ $ragResponse = Invoke-RestMethod -Uri "http://localhost:8000/rag-generate" `
 # Display the response
 $ragResponse | ConvertTo-Json -Depth 10
 
-Step 4: Compare RAG vs Non-RAG
+# Step 4: Compare RAG vs Non-RAG
 
 # Without RAG (direct generation)
 Write-Host "`n=== WITHOUT RAG ===" -ForegroundColor Yellow
@@ -428,6 +428,8 @@ kubectl get pods -n llm-platform
 kubectl wait --for=condition=ready pod -l app=prometheus -n llm-platform --timeout=120s
 kubectl wait --for=condition=ready pod -l app=grafana -n llm-platform --timeout=120s
 
+
+
 # Access Prometheus
 # Option 1: Port forward
 kubectl port-forward -n llm-platform svc/prometheus 9090:9090
@@ -436,6 +438,8 @@ kubectl port-forward -n llm-platform svc/prometheus 9090:9090
 
 # Option 2: Minikube service
 minikube service prometheus -n llm-platform
+
+
 
 # Access Grafana
 # Option 1: Port forward
@@ -447,12 +451,16 @@ kubectl port-forward -n llm-platform svc/grafana 3000:3000
 # Option 2: Minikube service
 minikube service grafana -n llm-platform
 
+
+
 # Verify Prometheus is Scraping Metrics
 
 # Open Prometheus UI: http://localhost:9090
 # Go to Status → Targets
 # Look for llm-api - it should show as UP
 # Try a query: llm_requests_total
+
+
 
 # Verify Grafana Dashboard
 
@@ -465,6 +473,8 @@ minikube service grafana -n llm-platform
 # Click + → Dashboard
 # Add a panel
 # Use query: rate(llm_requests_total[5m])
+
+
 
 # Verify Everything Works
 # 1. Check Prometheus targets (should show llm-api)
