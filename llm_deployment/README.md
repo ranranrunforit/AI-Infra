@@ -411,7 +411,7 @@ kubectl logs -f deployment/llm-api -n llm-platform
 
 
 
-### Monitoring Deployment
+### Monitoring Stack Deployment
 
 ```bash
 
