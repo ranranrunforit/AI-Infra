@@ -205,6 +205,12 @@ kubectl get pods -n llm-platform -w
 # Check pod logs
 kubectl logs -f deployment/llm-api -n llm-platform
 
+# Check pod status in detail
+kubectl describe pod -l app=llm-api -n llm-platform
+
+# Check logs
+kubectl logs -l app=llm-api -n llm-platform --tail=50
+
 # Check service status
 kubectl get svc -n llm-platform
 
