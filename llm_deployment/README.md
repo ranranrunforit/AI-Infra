@@ -416,7 +416,7 @@ kubectl logs -f deployment/llm-api -n llm-platform
 ```bash
 # deploy Prometheus and Grafana:
 # Deploy Prometheus
-kubectl apply -f prometheus-deployment.yaml
+kubectl apply -f kubernetes/prometheus.yaml
 
 # Deploy Grafana
 kubectl apply -f grafana-deployment.yaml
