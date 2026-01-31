@@ -252,8 +252,8 @@ curl -X POST "http://localhost:8000/generate" \
 
 
 # 7. Typical Workflow
-# 1. First time:
-bash# 1. Build image
+# First time:
+# 1. Build image
 docker build -t llm-deployment-platform:latest .
 
 # 2. Load into cluster (for minikube)
@@ -261,8 +261,9 @@ minikube image load llm-deployment-platform:latest
 
 # 3. Deploy
 kubectl apply -f kubernetes/
-After code changes:
-bash# 1. Rebuild image
+
+# After code changes:
+# 1. Rebuild image
 docker build -t llm-deployment-platform:latest .
 
 # 2. Reload into cluster
