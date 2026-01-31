@@ -414,8 +414,60 @@ kubectl logs -f deployment/llm-api -n llm-platform
 ### Monitoring Stack Deployment
 
 ```bash
+# deploy Prometheus and Grafana:
+# Deploy Prometheus
+kubectl apply -f prometheus-deployment.yaml
 
+# Deploy Grafana
+kubectl apply -f grafana-deployment.yaml
+
+# Check if they're running
+kubectl get pods -n llm-platform
+
+# Wait for them to be ready
+kubectl wait --for=condition=ready pod -l app=prometheus -n llm-platform --timeout=120s
+kubectl wait --for=condition=ready pod -l app=grafana -n llm-platform --timeout=120s
+
+# Access Prometheus
+# Option 1: Port forward
+kubectl port-forward -n llm-platform svc/prometheus 9090:9090
+
+# Then open in browser: http://localhost:9090
+
+# Option 2: Minikube service
+minikube service prometheus -n llm-platform
+
+# Access Grafana
+# Option 1: Port forward
+kubectl port-forward -n llm-platform svc/grafana 3000:3000
+
+# Then open in browser: http://localhost:3000
+# Login: admin / admin
+
+# Option 2: Minikube service
+minikube service grafana -n llm-platform
+
+# Verify Prometheus is Scraping Metrics
+
+# Open Prometheus UI: http://localhost:9090
+# Go to Status → Targets
+# Look for llm-api - it should show as UP
+# Try a query: llm_requests_total
+
+# Verify Grafana Dashboard
+
+# Open Grafana: http://localhost:3000 (admin/admin)
+# Go to Connections → Data sources
+# You should see Prometheus configured
+# Click Test to verify connection
+# Create a simple dashboard:
+
+# Click + → Dashboard
+# Add a panel
+# Use query: rate(llm_requests_total[5m])
 ```
+
+
 
 ## Architecture
 
