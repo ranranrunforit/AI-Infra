@@ -411,7 +411,7 @@ kubectl logs -f deployment/llm-api -n llm-platform
 
 
 
-### Monitoring Stack Deployment
+### Prometheus & Grafana Monitoring Stack Deployment
 
 ```bash
 # deploy Prometheus and Grafana:
@@ -482,6 +482,23 @@ Invoke-RestMethod -Uri "http://localhost:3000/api/datasources" `
 Invoke-RestMethod -Uri "http://localhost:3000/api/search" `
     -Headers @{ Authorization = "Basic $([Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('admin:admin')))" } |
     ConvertTo-Json -Depth 10
+
+
+
+# Apply the Change
+# Run these commands to update the ConfigMap and restart Grafana to pick up the new JSON file:
+
+# 1. Apply the updated file
+kubectl apply -f kubernetes/grafana.yaml
+
+# 2. Restart the Grafana pod to force it to reload the file immediately
+kubectl delete pod -n llm-platform -l app=grafana
+# or Restart Grafana to pick up the new dashboard
+kubectl rollout restart deployment/grafana -n llm-platform
+
+# 3: Verify
+# Wait about 30 seconds for the new pod to start, then check the logs again:
+kubectl logs -n llm-platform -l app=grafana
 ```
 
 
