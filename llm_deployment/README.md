@@ -84,6 +84,8 @@ Invoke-RestMethod -Uri "http://localhost:8000/generate" `
 
 # Running the Project in Kubernetes
 
+
+
 ## Prerequisites
 
 # Install Tools with Winget
@@ -129,7 +131,10 @@ minikube addons enable nvidia-gpu-device-plugin  # Try this alternative too
 minikube addons enable metrics-server
 
 
+
 ## Step-by-Step Deployment
+
+
 
 ### 1. Build and Push Docker Image
 
@@ -148,6 +153,7 @@ minikube image load llm-deployment-platform:latest
 kind load docker-image llm-deployment-platform:latest --name llm-cluster
 
 
+
 ### 2. Create Secrets
 
 # **Important**: Never commit secrets to Git! Create them manually
@@ -163,6 +169,7 @@ kubectl create secret generic llm-api-secrets `
 
 # Verify the secret was created
 kubectl get secrets -n llm-platform
+
 
 
 ### 3. Deploy to Kubernetes
@@ -190,6 +197,7 @@ kubectl apply -f kubernetes/service.yaml
 kubectl apply -f kubernetes/hpa.yaml
 
 
+
 ### 4. Verify Deployment
 # Check if pods are running
 kubectl get pods -n llm-platform -w
@@ -202,6 +210,7 @@ kubectl get svc -n llm-platform
 
 # Describe pod to see events
 kubectl describe pod -l app=llm-api -n llm-platform
+
 
 
 ### 5. Access the API
@@ -226,6 +235,8 @@ kubectl get svc llm-api-external -n llm-platform
 # Once you have EXTERNAL-IP, access via:
 # http://<EXTERNAL-IP>/docs
 
+
+
 ### 6. Test the API
 # Health check
 curl http://localhost:8000/health
@@ -237,6 +248,29 @@ curl -X POST "http://localhost:8000/generate" \
     "prompt": "What is machine learning?",
     "max_tokens": 100
   }'
+
+
+
+# 7. Typical Workflow
+# 1. First time:
+bash# 1. Build image
+docker build -t llm-deployment-platform:latest .
+
+# 2. Load into cluster (for minikube)
+minikube image load llm-deployment-platform:latest
+
+# 3. Deploy
+kubectl apply -f kubernetes/
+After code changes:
+bash# 1. Rebuild image
+docker build -t llm-deployment-platform:latest .
+
+# 2. Reload into cluster
+minikube image load llm-deployment-platform:latest
+
+# 3. Restart pods to use new image
+kubectl rollout restart deployment/llm-api -n llm-platform
+
 
 
 # Apply manifests
