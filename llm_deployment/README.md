@@ -239,7 +239,11 @@ kubectl get svc llm-api-external -n llm-platform
 
 ### 6. Test the API
 # Health check
-curl http://localhost:8000/health
+# Terminal 1 (keep this running):
+kubectl port-forward -n llm-platform svc/llm-api 8000:8000
+
+# Terminal 2 (open a NEW PowerShell window):
+curl.exe http://localhost:8000/health
 
 # Test prediction
 curl -X POST "http://localhost:8000/generate" \
@@ -248,6 +252,14 @@ curl -X POST "http://localhost:8000/generate" \
     "prompt": "What is machine learning?",
     "max_tokens": 100
   }'
+
+Invoke-RestMethod -Uri "http://localhost:8000/generate" `
+-Method Post `
+-Headers @{ "Content-Type" = "application/json" } `
+-Body (@{
+prompt = "What is machine learning?"
+max_tokens = 100
+} | ConvertTo-Json)
 
 
 
