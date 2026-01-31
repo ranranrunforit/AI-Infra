@@ -291,12 +291,108 @@ kubectl rollout restart deployment/llm-api -n llm-platform
 
 
 # Testing RAG Functionality
+
 # Step 1: Verify ChromaDB is Running
+
 # Check if the pod has access to ChromaDB
 kubectl exec -n llm-platform deployment/llm-api -- ls -la /app/chroma_db
 
 # Check logs for ChromaDB initialization
 kubectl logs -n llm-platform deployment/llm-api | Select-String -Pattern "chroma"
+
+# Step 2: Ingest a Document
+
+$ingestBody = @{
+    documents = @(
+        @{
+            text = "Machine learning is a branch of artificial intelligence (AI) and computer science 
+that focuses on using data and algorithms to enable AI to imitate the way humans 
+learn, gradually improving its accuracy. Machine learning is an important component 
+of the growing field of data science. Through the use of statistical methods, 
+algorithms are trained to make classifications or predictions, and to uncover key 
+insights in data mining projects.
+
+There are three main types of machine learning:
+1. Supervised Learning: The algorithm learns from labeled training data
+2. Unsupervised Learning: The algorithm finds patterns in unlabeled data
+3. Reinforcement Learning: The algorithm learns through trial and error"
+            # Notice: No 'metadata' key here. Put keys directly in the object.
+            source = "ml-introduction"
+            category = "education"
+            timestamp = "2025-01-31"
+            page_number = 1
+            is_verified = $true
+        }
+    )
+} | ConvertTo-Json -Depth 10
+
+Invoke-RestMethod -Uri "http://localhost:8000/ingest" `
+     -Method Post `
+     -Headers @{ "Content-Type" = "application/json" } `
+     -Body $ingestBody
+
+# Step 3: Test RAG Query
+
+# Query using RAG
+$ragQuery = @{
+    query = "What are the three types of machine learning?"
+    max_tokens = 150
+} | ConvertTo-Json
+
+$ragResponse = Invoke-RestMethod -Uri "http://localhost:8000/rag-generate" `
+    -Method Post `
+    -Headers @{ "Content-Type" = "application/json" } `
+    -Body $ragQuery
+
+# Display the response
+$ragResponse | ConvertTo-Json -Depth 10
+
+Step 4: Compare RAG vs Non-RAG
+
+# Without RAG (direct generation)
+Write-Host "`n=== WITHOUT RAG ===" -ForegroundColor Yellow
+$directQuery = @{
+    prompt = "What are the three types of machine learning?"
+    max_tokens = 150
+} | ConvertTo-Json
+
+$directQuery = @{
+    # This is the ChatML format TinyLlama usually expects
+    prompt = "<|system|>\nYou are a helpful assistant.</s>\n<|user|>\nWhat are the three types of machine learning?</s>\n<|assistant|>\n"
+    max_tokens = 150
+} | ConvertTo-Json
+
+$directResponse = Invoke-RestMethod -Uri "http://localhost:8000/generate" `
+    -Method Post `
+    -Headers @{ "Content-Type" = "application/json" } `
+    -Body $directQuery
+
+Write-Host $directResponse.text
+
+# With RAG
+Write-Host "`n=== WITH RAG ===" -ForegroundColor Green
+Write-Host $ragResponse.text
+
+# Show retrieved context
+Write-Host "`n=== RETRIEVED CONTEXT ===" -ForegroundColor Cyan
+if ($ragResponse.retrieved_chunks) {
+    $ragResponse.retrieved_chunks | ForEach-Object {
+        Write-Host "Score: $($_.score)"
+        Write-Host "Text: $($_.text.Substring(0, [Math]::Min(200, $_.text.Length)))..."
+        Write-Host ""
+    }
+}
+
+# Step 5: Verify Vector Database
+
+# Check ChromaDB statistics endpoint (if your API exposes it)
+Invoke-RestMethod -Uri "http://localhost:8000/health"
+
+# Check the size of ChromaDB directory
+kubectl exec -n llm-platform deployment/llm-api -- du -sh /app/chroma_db
+
+# List collections in ChromaDB (via API if exposed)
+# This depends on your implementation
 
 
 
