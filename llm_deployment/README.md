@@ -391,8 +391,6 @@ Invoke-RestMethod -Uri "http://localhost:8000/health"
 # Check the size of ChromaDB directory
 kubectl exec -n llm-platform deployment/llm-api -- du -sh /app/chroma_db
 
-# List collections in ChromaDB (via API if exposed)
-# This depends on your implementation
 
 
 
