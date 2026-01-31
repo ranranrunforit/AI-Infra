@@ -302,6 +302,13 @@ kubectl apply -f kubernetes/hpa.yaml
 # Check status
 kubectl get pods -n llm-platform
 kubectl logs -f deployment/llm-api -n llm-platform
+
+```
+
+### Monitoring Deployment
+
+```bash
+
 ```
 
 ## Architecture
