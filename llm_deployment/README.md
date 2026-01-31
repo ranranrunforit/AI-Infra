@@ -221,7 +221,7 @@ kubectl describe pod -l app=llm-api -n llm-platform
 
 ### 5. Access the API
 
-**For Minikube:**
+# **For Minikube:**
 
 # Get the service URL
 minikube service llm-api-external -n llm-platform --url
@@ -230,11 +230,11 @@ minikube service llm-api-external -n llm-platform --url
 kubectl port-forward -n llm-platform svc/llm-api 8000:8000
 
 
-**For Kind or other local K8s:**
+# **For Kind or other local K8s:**
 # Use port forwarding
 kubectl port-forward -n llm-platform svc/llm-api 8000:8000
 
-**For Cloud Kubernetes (GKE, EKS, AKS):**
+# **For Cloud Kubernetes (GKE, EKS, AKS):**
 # Get the external IP (may take a few minutes)
 kubectl get svc llm-api-external -n llm-platform
 
