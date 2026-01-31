@@ -419,7 +419,7 @@ kubectl logs -f deployment/llm-api -n llm-platform
 kubectl apply -f kubernetes/prometheus.yaml
 
 # Deploy Grafana
-kubectl apply -f grafana-deployment.yaml
+kubectl apply -f kubernetes/grafana.yaml
 
 # Check if they're running
 kubectl get pods -n llm-platform
@@ -465,6 +465,23 @@ minikube service grafana -n llm-platform
 # Click + → Dashboard
 # Add a panel
 # Use query: rate(llm_requests_total[5m])
+
+# Verify Everything Works
+# 1. Check Prometheus targets (should show llm-api)
+Invoke-RestMethod -Uri "http://localhost:9090/api/v1/targets" | ConvertTo-Json -Depth 10
+
+# 2. Check Prometheus rules (should show 8 alert rules)
+Invoke-RestMethod -Uri "http://localhost:9090/api/v1/rules" | ConvertTo-Json -Depth 10
+
+# 3. Check Grafana datasources (should show Prometheus)
+Invoke-RestMethod -Uri "http://localhost:3000/api/datasources" `
+    -Headers @{ Authorization = "Basic $([Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('admin:admin')))" } |
+    ConvertTo-Json -Depth 10
+
+# 4. Check Grafana dashboards (should show LLM dashboard)
+Invoke-RestMethod -Uri "http://localhost:3000/api/search" `
+    -Headers @{ Authorization = "Basic $([Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('admin:admin')))" } |
+    ConvertTo-Json -Depth 10
 ```
 
 
