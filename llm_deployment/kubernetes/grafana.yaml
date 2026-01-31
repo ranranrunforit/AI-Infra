@@ -1,0 +1,343 @@
+---
+# ConfigMap for Grafana datasource (Prometheus)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: llm-platform
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+
+---
+# ConfigMap for Grafana dashboard provider
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: llm-platform
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+# ConfigMap for the actual dashboard JSON
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: llm-platform
+data:
+  llm-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "llm-api-dashboard",
+        "title": "LLM API Monitoring",
+        "tags": ["llm", "api", "monitoring"],
+        "timezone": "browser",
+        "schemaVersion": 16,
+        "version": 0,
+        "refresh": "5s",
+        "panels": [
+          {
+            "id": 1,
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+            "type": "graph",
+            "title": "Request Rate",
+            "targets": [
+              {
+                "expr": "rate(llm_requests_total[5m])",
+                "legendFormat": "Requests/sec",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "reqps", "label": "Requests/sec"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 2,
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+            "type": "graph",
+            "title": "Response Latency",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(llm_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "p50",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(llm_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "p95",
+                "refId": "B"
+              },
+              {
+                "expr": "histogram_quantile(0.99, rate(llm_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "p99",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {"format": "s", "label": "Latency"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 3,
+            "gridPos": {"x": 0, "y": 8, "w": 8, "h": 8},
+            "type": "graph",
+            "title": "Error Rate",
+            "targets": [
+              {
+                "expr": "rate(llm_requests_total{status=~\"5..\"}[5m])",
+                "legendFormat": "5xx Errors",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(llm_requests_total{status=~\"4..\"}[5m])",
+                "legendFormat": "4xx Errors",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {"format": "reqps", "label": "Errors/sec"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 4,
+            "gridPos": {"x": 8, "y": 8, "w": 8, "h": 8},
+            "type": "graph",
+            "title": "Token Throughput",
+            "targets": [
+              {
+                "expr": "rate(llm_tokens_generated_total[5m])",
+                "legendFormat": "Tokens/sec",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "short", "label": "Tokens/sec"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 5,
+            "gridPos": {"x": 16, "y": 8, "w": 8, "h": 8},
+            "type": "stat",
+            "title": "Active Requests",
+            "targets": [
+              {
+                "expr": "llm_active_requests",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area"
+            }
+          },
+          {
+            "id": 6,
+            "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+            "type": "graph",
+            "title": "GPU Utilization (%)",
+            "targets": [
+              {
+                "expr": "gpu_utilization_percent",
+                "legendFormat": "GPU Usage",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "percent", "label": "GPU %", "max": 100, "min": 0},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 7,
+            "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+            "type": "graph",
+            "title": "GPU Memory Usage",
+            "targets": [
+              {
+                "expr": "gpu_memory_used_mb",
+                "legendFormat": "Used",
+                "refId": "A"
+              },
+              {
+                "expr": "gpu_memory_total_mb",
+                "legendFormat": "Total",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {"format": "mbytes", "label": "Memory"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 8,
+            "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+            "type": "graph",
+            "title": "Cost per Hour",
+            "targets": [
+              {
+                "expr": "rate(llm_cost_total[1h])",
+                "legendFormat": "Cost/hour",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "currencyUSD", "label": "$/hour"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 9,
+            "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+            "type": "stat",
+            "title": "Total Requests (24h)",
+            "targets": [
+              {
+                "expr": "increase(llm_requests_total[24h])",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area"
+            }
+          }
+        ]
+      },
+      "overwrite": true
+    }
+
+---
+# Grafana Deployment with auto-loaded dashboards
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: llm-platform
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.2
+          ports:
+            - name: web
+              containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: "/var/lib/grafana/dashboards/llm-dashboard.json"
+          volumeMounts:
+            - name: grafana-storage
+              mountPath: /var/lib/grafana
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: grafana-dashboards
+              mountPath: /var/lib/grafana/dashboards
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: grafana-storage
+          persistentVolumeClaim:
+            claimName: grafana-storage
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
+        - name: grafana-dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: grafana-dashboards
+          configMap:
+            name: grafana-dashboards
+
+---
+# Grafana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: llm-platform
+  labels:
+    app: grafana
+spec:
+  type: NodePort
+  ports:
+    - name: web
+      port: 3000
+      targetPort: 3000
+      nodePort: 30030
+  selector:
+    app: grafana
+
+---
+# PVC for Grafana storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-storage
+  namespace: llm-platform
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
