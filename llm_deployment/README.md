@@ -290,6 +290,16 @@ kubectl rollout restart deployment/llm-api -n llm-platform
 
 
 
+# Testing RAG Functionality
+# Step 1: Verify ChromaDB is Running
+# Check if the pod has access to ChromaDB
+kubectl exec -n llm-platform deployment/llm-api -- ls -la /app/chroma_db
+
+# Check logs for ChromaDB initialization
+kubectl logs -n llm-platform deployment/llm-api | Select-String -Pattern "chroma"
+
+
+
 # Apply manifests
 kubectl apply -f kubernetes/namespace.yaml
 kubectl apply -f kubernetes/configmap.yaml
@@ -304,6 +314,8 @@ kubectl get pods -n llm-platform
 kubectl logs -f deployment/llm-api -n llm-platform
 
 ```
+
+
 
 ### Monitoring Deployment
 
