@@ -875,5 +875,3 @@ Model Inference
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2024-01-15
