@@ -1,4 +1,4 @@
-# Project 201: Distributed Training Platform with Ray
+# Project 09: Distributed Training Platform with Ray
 
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
 ![Ray](https://img.shields.io/badge/Ray-2.9+-blue)
@@ -583,39 +583,3 @@ project-201-distributed-training/
 ```
 
 ---
-
-## Contributing
-
-Contributions welcome! Please see [CONTRIBUTING.md](../../CONTRIBUTING.md)
-
----
-
-## License
-
-MIT License - see [LICENSE](../../LICENSE)
-
----
-
-## Acknowledgments
-
-- **Ray Team** for the excellent distributed training framework
-- **PyTorch Team** for DDP and distributed utilities
-- **NVIDIA** for NCCL and GPU optimization tools
-- **Kubernetes** community for GPU operator and scheduling
-
----
-
-## Contact
-
-For questions or support:
-- **Email**: ai-infra-curriculum@joshua-ferguson.com
-- **GitHub Issues**: [Create an issue](https://github.com/ai-infra-curriculum/ai-infra-senior-engineer-solutions/issues)
-- **Slack**: #project-201 channel
-
----
-
-**Next Steps**:
-1. Review [STEP_BY_STEP.md](STEP_BY_STEP.md) for detailed implementation guide
-2. Understand [ARCHITECTURE.md](ARCHITECTURE.md) for design decisions
-3. Check [BENCHMARKING.md](BENCHMARKING.md) for performance analysis
-4. Deploy and experiment!
