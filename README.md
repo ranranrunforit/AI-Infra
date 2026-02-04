@@ -32,3 +32,13 @@ Airflow, MLflow, Kubernetes, Prometheus, Grafana, Docker, DVC
 **[LLM Deployment Platform](./llm_deployment)**
 
 vLLM, RAG, Pinecone Vector DB, Kubernetes, Prometheus, Grafana, Docker
+
+**[Distributed Training Platform](./distributed_training)**
+
+Ray, Kubernetes, Docker
+
+**[High-Performance Model Serving with TensorRT-LLM]()**
+
+**[Multi-Region ML Platform]()**
+
+**[Custom Kubernetes Operator for ML Training Jobs]()**
