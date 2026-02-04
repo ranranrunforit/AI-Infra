@@ -1,0 +1,303 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ray-cluster
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ray-serviceaccount
+  namespace: ray-cluster
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ray-role
+  namespace: ray-cluster
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "services"]
+  verbs: ["get", "list", "watch", "create", "delete", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ray-rolebinding
+  namespace: ray-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ray-role
+subjects:
+- kind: ServiceAccount
+  name: ray-serviceaccount
+  namespace: ray-cluster
+---
+# Ray Head Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ray-head
+  namespace: ray-cluster
+  labels:
+    app: ray
+    component: head
+spec:
+  type: ClusterIP
+  selector:
+    app: ray
+    component: head
+  ports:
+  - name: client
+    port: 10001
+    targetPort: 10001
+  - name: dashboard
+    port: 8265
+    targetPort: 8265
+  - name: redis
+    port: 6379
+    targetPort: 6379
+---
+# Ray Head Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ray-head
+  namespace: ray-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ray
+      component: head
+  template:
+    metadata:
+      labels:
+        app: ray
+        component: head
+    spec:
+      serviceAccountName: ray-serviceaccount
+      containers:
+      - name: ray-head
+        image: your-registry/ray-training:latest
+        imagePullPolicy: Always
+        command:
+        - /bin/bash
+        - -c
+        - |
+          ray start --head \
+            --port=6379 \
+            --dashboard-host=0.0.0.0 \
+            --dashboard-port=8265 \
+            --num-cpus=0 \
+            --block
+        ports:
+        - containerPort: 6379
+          name: redis
+        - containerPort: 8265
+          name: dashboard
+        - containerPort: 10001
+          name: client
+        env:
+        - name: RAY_memory_monitor_refresh_ms
+          value: "0"
+        - name: RAY_GRAFANA_HOST
+          value: "http://grafana.monitoring:3000"
+        - name: RAY_PROMETHEUS_HOST
+          value: "http://prometheus.monitoring:9090"
+        resources:
+          requests:
+            cpu: "4"
+            memory: "16Gi"
+          limits:
+            cpu: "8"
+            memory: "32Gi"
+        volumeMounts:
+        - name: shared-storage
+          mountPath: /mnt/data
+        - name: checkpoint-storage
+          mountPath: /mnt/checkpoints
+      volumes:
+      - name: shared-storage
+        persistentVolumeClaim:
+          claimName: ray-shared-pvc
+      - name: checkpoint-storage
+        persistentVolumeClaim:
+          claimName: ray-checkpoint-pvc
+---
+# Ray Worker StatefulSet (GPU workers)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ray-worker
+  namespace: ray-cluster
+spec:
+  serviceName: ray-worker
+  replicas: 4  # 4 GPU worker nodes
+  selector:
+    matchLabels:
+      app: ray
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: ray
+        component: worker
+    spec:
+      serviceAccountName: ray-serviceaccount
+      # GPU node affinity
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu
+                operator: Exists
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - worker
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: ray-worker
+        image: your-registry/ray-training:latest
+        imagePullPolicy: Always
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Wait for head node
+          until ray health-check --address=ray-head:6379; do
+            echo "Waiting for Ray head..."
+            sleep 2
+          done
+
+          # Start worker
+          ray start \
+            --address=ray-head:6379 \
+            --num-cpus=16 \
+            --num-gpus=2 \
+            --block
+        env:
+        - name: RAY_memory_monitor_refresh_ms
+          value: "0"
+        # NCCL optimization
+        - name: NCCL_DEBUG
+          value: "INFO"
+        - name: NCCL_IB_DISABLE
+          value: "0"
+        - name: NCCL_NET_GDR_LEVEL
+          value: "5"
+        - name: NCCL_SOCKET_IFNAME
+          value: "eth0"
+        - name: NCCL_NSOCKS_PERTHREAD
+          value: "4"
+        - name: NCCL_BUFFSIZE
+          value: "2097152"
+        # PyTorch optimization
+        - name: OMP_NUM_THREADS
+          value: "8"
+        - name: PYTORCH_CUDA_ALLOC_CONF
+          value: "max_split_size_mb:512"
+        resources:
+          requests:
+            cpu: "16"
+            memory: "64Gi"
+            nvidia.com/gpu: "2"
+          limits:
+            cpu: "32"
+            memory: "128Gi"
+            nvidia.com/gpu: "2"
+        volumeMounts:
+        - name: shared-storage
+          mountPath: /mnt/data
+        - name: checkpoint-storage
+          mountPath: /mnt/checkpoints
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: shared-storage
+        persistentVolumeClaim:
+          claimName: ray-shared-pvc
+      - name: checkpoint-storage
+        persistentVolumeClaim:
+          claimName: ray-checkpoint-pvc
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 32Gi
+---
+# Persistent Volume Claims for shared storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ray-shared-pvc
+  namespace: ray-cluster
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: nfs-storage  # Use your storage class
+  resources:
+    requests:
+      storage: 500Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ray-checkpoint-pvc
+  namespace: ray-cluster
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: nfs-storage  # Use your storage class
+  resources:
+    requests:
+      storage: 1Ti
+---
+# HorizontalPodAutoscaler for workers (optional)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ray-worker-hpa
+  namespace: ray-cluster
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: ray-worker
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: ray_worker_queue_size
+      target:
+        type: AverageValue
+        averageValue: "10"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
