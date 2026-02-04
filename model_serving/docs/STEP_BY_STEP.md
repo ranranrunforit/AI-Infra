@@ -1,4 +1,4 @@
-# Project 202: High-Performance Model Serving - Step-by-Step Implementation Guide
+# Project 10: High-Performance Model Serving - Step-by-Step Implementation Guide
 
 ## Table of Contents
 
