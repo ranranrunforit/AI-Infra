@@ -37,8 +37,6 @@ vLLM, RAG, Pinecone Vector DB, Kubernetes, Prometheus, Grafana, Docker
 
 Ray, Kubernetes, Docker
 
-**[High-Performance Model Serving with TensorRT-LLM]()**
+**[High-Performance Model Serving with TensorRT-LLM](./model_serving)**
 
-**[Multi-Region ML Platform]()**
-
-**[Custom Kubernetes Operator for ML Training Jobs]()**
+FastAPI, TensorRT, vLLM, Prometheus, Jaeger
