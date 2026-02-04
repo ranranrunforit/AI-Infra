@@ -1,0 +1,256 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: model-serving
+  labels:
+    app: model-serving
+    component: inference
+    prometheus: kube-prometheus
+spec:
+  # Selector to match the service
+  selector:
+    matchLabels:
+      app: model-serving
+      component: inference
+
+  # Namespace selector
+  namespaceSelector:
+    matchNames:
+    - default  # Update based on your namespace
+
+  # Endpoints to scrape
+  endpoints:
+  - port: metrics  # Named port from Service
+    # Scrape interval
+    interval: 15s
+    # Scrape timeout
+    scrapeTimeout: 10s
+    # Metrics path
+    path: /metrics
+    # Scheme (http or https)
+    scheme: http
+    # TLS configuration (if using HTTPS)
+    # tlsConfig:
+    #   insecureSkipVerify: true
+
+    # Relabeling configuration
+    relabelings:
+    # Add pod name as label
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+      action: replace
+    # Add namespace as label
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+      action: replace
+    # Add node name as label
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
+      action: replace
+    # Add pod IP as label
+    - sourceLabels: [__meta_kubernetes_pod_ip]
+      targetLabel: pod_ip
+      action: replace
+
+    # Metric relabeling (applied to scraped metrics)
+    metricRelabelings:
+    # Drop metrics we don't need
+    - sourceLabels: [__name__]
+      regex: 'go_.*'
+      action: drop
+    # Add environment label
+    - targetLabel: environment
+      replacement: production  # Override in overlays
+
+---
+# =============================================================================
+# PrometheusRule - Define alerting rules
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: model-serving-alerts
+  labels:
+    app: model-serving
+    component: inference
+    prometheus: kube-prometheus
+spec:
+  groups:
+  # =============================================================================
+  # Performance Alerts
+  # =============================================================================
+  - name: model-serving-performance
+    interval: 30s
+    rules:
+    # High latency alert
+    - alert: ModelServingHighLatency
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(request_duration_seconds_bucket{app="model-serving"}[5m])) by (le)
+        ) > 0.5
+      for: 5m
+      labels:
+        severity: warning
+        component: model-serving
+      annotations:
+        summary: "High inference latency detected"
+        description: "P95 latency is {{ $value }}s (threshold: 0.5s) for model serving"
+
+    # Very high latency alert
+    - alert: ModelServingVeryHighLatency
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(request_duration_seconds_bucket{app="model-serving"}[5m])) by (le)
+        ) > 1.0
+      for: 2m
+      labels:
+        severity: critical
+        component: model-serving
+      annotations:
+        summary: "Critical inference latency detected"
+        description: "P95 latency is {{ $value }}s (threshold: 1.0s) for model serving"
+
+  # =============================================================================
+  # Error Rate Alerts
+  # =============================================================================
+  - name: model-serving-errors
+    interval: 30s
+    rules:
+    # High error rate
+    - alert: ModelServingHighErrorRate
+      expr: |
+        sum(rate(request_errors_total{app="model-serving"}[5m])) /
+        sum(rate(requests_total{app="model-serving"}[5m])) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        component: model-serving
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+    # Critical error rate
+    - alert: ModelServingCriticalErrorRate
+      expr: |
+        sum(rate(request_errors_total{app="model-serving"}[5m])) /
+        sum(rate(requests_total{app="model-serving"}[5m])) > 0.10
+      for: 2m
+      labels:
+        severity: critical
+        component: model-serving
+      annotations:
+        summary: "Critical error rate detected"
+        description: "Error rate is {{ $value | humanizePercentage }} (threshold: 10%)"
+
+  # =============================================================================
+  # GPU Alerts
+  # =============================================================================
+  - name: model-serving-gpu
+    interval: 30s
+    rules:
+    # High GPU utilization
+    - alert: ModelServingHighGPUUtilization
+      expr: |
+        avg(gpu_utilization_percent{app="model-serving"}) > 95
+      for: 10m
+      labels:
+        severity: warning
+        component: model-serving
+      annotations:
+        summary: "High GPU utilization"
+        description: "GPU utilization is {{ $value }}% (threshold: 95%)"
+
+    # GPU memory exhaustion
+    - alert: ModelServingGPUMemoryHigh
+      expr: |
+        avg(gpu_memory_utilization_percent{app="model-serving"}) > 90
+      for: 5m
+      labels:
+        severity: warning
+        component: model-serving
+      annotations:
+        summary: "High GPU memory usage"
+        description: "GPU memory usage is {{ $value }}% (threshold: 90%)"
+
+    # GPU OOM errors
+    - alert: ModelServingGPUOOM
+      expr: |
+        increase(gpu_oom_errors_total{app="model-serving"}[5m]) > 0
+      labels:
+        severity: critical
+        component: model-serving
+      annotations:
+        summary: "GPU out of memory errors detected"
+        description: "{{ $value }} GPU OOM errors in the last 5 minutes"
+
+  # =============================================================================
+  # Availability Alerts
+  # =============================================================================
+  - name: model-serving-availability
+    interval: 30s
+    rules:
+    # Pod down
+    - alert: ModelServingPodDown
+      expr: |
+        up{app="model-serving"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        component: model-serving
+      annotations:
+        summary: "Model serving pod is down"
+        description: "Pod {{ $labels.pod }} has been down for more than 5 minutes"
+
+    # Low replica count
+    - alert: ModelServingLowReplicas
+      expr: |
+        kube_deployment_status_replicas_available{deployment="model-serving"} < 2
+      for: 5m
+      labels:
+        severity: warning
+        component: model-serving
+      annotations:
+        summary: "Low number of available replicas"
+        description: "Only {{ $value }} replicas available (minimum: 2)"
+
+    # No replicas available
+    - alert: ModelServingNoReplicas
+      expr: |
+        kube_deployment_status_replicas_available{deployment="model-serving"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: model-serving
+      annotations:
+        summary: "No model serving replicas available"
+        description: "All model serving pods are down"
+
+  # =============================================================================
+  # Queue and Throughput Alerts
+  # =============================================================================
+  - name: model-serving-throughput
+    interval: 30s
+    rules:
+    # High queue depth
+    - alert: ModelServingHighQueueDepth
+      expr: |
+        avg(request_queue_depth{app="model-serving"}) > 100
+      for: 5m
+      labels:
+        severity: warning
+        component: model-serving
+      annotations:
+        summary: "High request queue depth"
+        description: "Average queue depth is {{ $value }} (threshold: 100)"
+
+    # Request queue saturation
+    - alert: ModelServingQueueSaturated
+      expr: |
+        avg(request_queue_depth{app="model-serving"}) > 500
+      for: 2m
+      labels:
+        severity: critical
+        component: model-serving
+      annotations:
+        summary: "Request queue is saturated"
+        description: "Average queue depth is {{ $value }} (threshold: 500)"

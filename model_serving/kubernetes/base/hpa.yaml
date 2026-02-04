@@ -1,0 +1,205 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: model-serving-hpa
+  labels:
+    app: model-serving
+    component: inference
+spec:
+  # Target deployment to scale
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: model-serving
+
+  # Replica bounds
+  minReplicas: 2
+  maxReplicas: 20
+
+  # Scaling behavior configuration
+  behavior:
+    # Scale up behavior - aggressive scaling for traffic spikes
+    scaleUp:
+      # Stabilization window - wait before scaling up again
+      stabilizationWindowSeconds: 60
+      # Policies define how fast we can scale
+      policies:
+      # Allow adding up to 4 pods per 60 seconds (aggressive)
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      # Allow scaling up by 100% (double) per 60 seconds
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      # Select policy that adds most pods
+      selectPolicy: Max
+
+    # Scale down behavior - conservative to avoid thrashing
+    scaleDown:
+      # Stabilization window - wait 5 minutes before scaling down
+      stabilizationWindowSeconds: 300
+      # Policies define how fast we can scale down
+      policies:
+      # Remove at most 1 pod per 60 seconds (conservative)
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      # Allow scaling down by at most 10% per 60 seconds
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      # Select policy that removes fewest pods
+      selectPolicy: Min
+
+  # Metrics to scale on
+  metrics:
+  # =============================================================================
+  # CPU Utilization - Standard Kubernetes metric
+  # =============================================================================
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # Scale when average CPU > 70%
+
+  # =============================================================================
+  # Memory Utilization - Standard Kubernetes metric
+  # =============================================================================
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80  # Scale when average memory > 80%
+
+  # =============================================================================
+  # GPU Utilization - Custom metric from DCGM or nvidia-smi
+  # Requires metrics server with GPU support (e.g., DCGM exporter + adapter)
+  # =============================================================================
+  - type: Pods
+    pods:
+      metric:
+        name: gpu_utilization_percent
+      target:
+        type: AverageValue
+        averageValue: "80"  # Scale when GPU utilization > 80%
+
+  # =============================================================================
+  # GPU Memory Utilization - Custom metric
+  # =============================================================================
+  - type: Pods
+    pods:
+      metric:
+        name: gpu_memory_utilization_percent
+      target:
+        type: AverageValue
+        averageValue: "85"  # Scale when GPU memory > 85%
+
+  # =============================================================================
+  # Request Latency - Custom metric from application
+  # Requires application to export this metric and Prometheus adapter
+  # =============================================================================
+  - type: Pods
+    pods:
+      metric:
+        name: request_latency_p95_milliseconds
+      target:
+        type: AverageValue
+        averageValue: "100"  # Scale when P95 latency > 100ms
+
+  # =============================================================================
+  # Request Queue Depth - Custom metric
+  # =============================================================================
+  - type: Pods
+    pods:
+      metric:
+        name: request_queue_depth
+      target:
+        type: AverageValue
+        averageValue: "50"  # Scale when queue depth > 50 requests per pod
+
+  # =============================================================================
+  # Requests Per Second - Custom metric
+  # =============================================================================
+  - type: Pods
+    pods:
+      metric:
+        name: requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"  # Scale when RPS > 100 per pod
+
+---
+# =============================================================================
+# VerticalPodAutoscaler (VPA) - Optional
+# Automatically adjusts CPU and memory requests/limits
+# Note: VPA and HPA should not target the same resources simultaneously
+# =============================================================================
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: model-serving-vpa
+  labels:
+    app: model-serving
+    component: inference
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: model-serving
+
+  # Update policy
+  updatePolicy:
+    # updateMode options:
+    # - "Off": Only provide recommendations, don't auto-update
+    # - "Initial": Only set resources on pod creation
+    # - "Recreate": Update existing pods by recreating them
+    # - "Auto": Update pods during their normal lifecycle
+    updateMode: "Off"  # Set to "Auto" or "Recreate" to enable
+
+  # Resource policy - control what VPA can change
+  resourcePolicy:
+    containerPolicies:
+    - containerName: model-serving
+      # Which resources VPA can scale
+      mode: Auto
+      # Minimum allowed resources
+      minAllowed:
+        cpu: "2000m"
+        memory: "8Gi"
+      # Maximum allowed resources
+      maxAllowed:
+        cpu: "16000m"
+        memory: "64Gi"
+      # Resources that VPA should not change
+      controlledResources:
+      - cpu
+      - memory
+      # Note: VPA doesn't manage GPU resources
+
+---
+# =============================================================================
+# PodDisruptionBudget - Ensure minimum availability during disruptions
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: model-serving-pdb
+  labels:
+    app: model-serving
+    component: inference
+spec:
+  # Minimum number of pods that must be available
+  minAvailable: 1
+  # Alternatively, use maxUnavailable to specify maximum unavailable pods
+  # maxUnavailable: 1
+
+  selector:
+    matchLabels:
+      app: model-serving
+      component: inference
+
+  # Unhealthy pod eviction policy
+  unhealthyPodEvictionPolicy: IfHealthyBudget

@@ -1,0 +1,216 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: model-serving
+  labels:
+    app: model-serving
+    environment: production
+  annotations:
+    # ==========================================================================
+    # Ingress Controller Configuration
+    # ==========================================================================
+    kubernetes.io/ingress.class: "nginx"
+
+    # ==========================================================================
+    # SSL/TLS Configuration
+    # ==========================================================================
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # TLS protocols and ciphers
+    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
+    nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384"
+    nginx.ingress.kubernetes.io/ssl-prefer-server-ciphers: "true"
+
+    # ==========================================================================
+    # CORS Configuration (Strict in production)
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/enable-cors: "false"
+    # If CORS is needed, use strict origins
+    # nginx.ingress.kubernetes.io/cors-allow-origin: "https://api.example.com"
+    # nginx.ingress.kubernetes.io/cors-allow-methods: "POST"
+    # nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # ==========================================================================
+    # Rate Limiting - Production settings
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/limit-rps: "500"
+    nginx.ingress.kubernetes.io/limit-rpm: "30000"
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    # Rate limit whitelist (for internal services)
+    nginx.ingress.kubernetes.io/limit-whitelist: "10.0.0.0/8,172.16.0.0/12"
+
+    # ==========================================================================
+    # Timeouts - Production values
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/keepalive-timeout: "75"
+
+    # ==========================================================================
+    # Request Size Limits
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: "1m"
+
+    # ==========================================================================
+    # Connection Settings
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-keepalive-connections: "100"
+    nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "60"
+
+    # ==========================================================================
+    # Load Balancing
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/load-balance: "ewma"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
+
+    # ==========================================================================
+    # Security Headers
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
+      more_set_headers "Content-Security-Policy: default-src 'self'";
+
+    # ==========================================================================
+    # Monitoring and Logging
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/enable-access-log: "true"
+    nginx.ingress.kubernetes.io/enable-modsecurity: "true"
+    nginx.ingress.kubernetes.io/enable-owasp-core-rules: "true"
+
+    # ==========================================================================
+    # Authentication (API Key validation)
+    # ==========================================================================
+    nginx.ingress.kubernetes.io/auth-snippet: |
+      if ($http_x_api_key = "") {
+        return 401 "API key required";
+      }
+
+    # ==========================================================================
+    # Canary Deployment Support
+    # ==========================================================================
+    # nginx.ingress.kubernetes.io/canary: "true"
+    # nginx.ingress.kubernetes.io/canary-weight: "10"
+    # nginx.ingress.kubernetes.io/canary-by-header: "X-Canary"
+
+spec:
+  # =============================================================================
+  # Ingress Rules
+  # =============================================================================
+  rules:
+  # Primary production domain
+  - host: model-serving.example.com
+    http:
+      paths:
+      # Main API endpoint
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: model-serving
+            port:
+              number: 8000
+
+      # Health check endpoint (for load balancer health checks)
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: model-serving
+            port:
+              number: 8000
+
+  # API subdomain (optional)
+  - host: api.model-serving.example.com
+    http:
+      paths:
+      - path: /v1
+        pathType: Prefix
+        backend:
+          service:
+            name: model-serving
+            port:
+              number: 8000
+
+  # Metrics endpoint (restricted access)
+  - host: metrics.model-serving.internal.example.com
+    http:
+      paths:
+      - path: /metrics
+        pathType: Exact
+        backend:
+          service:
+            name: model-serving
+            port:
+              number: 9090
+
+  # =============================================================================
+  # TLS Configuration
+  # =============================================================================
+  tls:
+  # Primary domain certificate
+  - hosts:
+    - model-serving.example.com
+    secretName: model-serving-prod-tls
+
+  # API subdomain certificate
+  - hosts:
+    - api.model-serving.example.com
+    secretName: model-serving-api-prod-tls
+
+  # Internal metrics certificate
+  - hosts:
+    - metrics.model-serving.internal.example.com
+    secretName: model-serving-metrics-tls
+
+---
+# =============================================================================
+# Canary Ingress (for canary deployments)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: model-serving-canary
+  labels:
+    app: model-serving
+    environment: production
+    deployment-type: canary
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Canary configuration
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "10"  # 10% of traffic
+    nginx.ingress.kubernetes.io/canary-by-header: "X-Canary-Version"
+    nginx.ingress.kubernetes.io/canary-by-header-value: "v2"
+
+    # Same timeout and rate limiting settings
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/limit-rps: "50"  # Lower limit for canary
+
+spec:
+  rules:
+  - host: model-serving.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: model-serving-canary
+            port:
+              number: 8000
+
+  tls:
+  - hosts:
+    - model-serving.example.com
+    secretName: model-serving-prod-tls

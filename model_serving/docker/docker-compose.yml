@@ -1,0 +1,405 @@
+version: '3.8'
+
+# =============================================================================
+# High-Performance Model Serving - Complete Stack
+# Docker Compose configuration for local development and testing
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Model Serving Application
+  # ===========================================================================
+  model-serving:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: production  # Use 'development' for dev mode
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: ai-infra/model-serving:latest
+    container_name: model-serving
+    hostname: model-serving
+
+    # GPU configuration - requires nvidia-docker2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # Number of GPUs to allocate
+              capabilities: [gpu]
+
+    # Environment variables
+    environment:
+      # Server
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8000
+      - SERVER_WORKERS=4
+      - SERVER_LOG_LEVEL=info
+
+      # Model configuration
+      - MODEL_CACHE_DIR=/app/models
+      - MODEL_WARMUP_ENABLED=true
+      - DEFAULT_MODEL_PRECISION=fp16
+      - MAX_MODELS_LOADED=5
+
+      # TensorRT
+      - TENSORRT_WORKSPACE_SIZE=4294967296
+      - TENSORRT_MAX_BATCH_SIZE=32
+      - TENSORRT_ENGINE_CACHE_DIR=/app/engine_cache
+      - TENSORRT_FP16_ENABLED=true
+
+      # vLLM
+      - VLLM_TENSOR_PARALLEL_SIZE=1
+      - VLLM_MAX_NUM_BATCHED_TOKENS=16384
+      - VLLM_MAX_NUM_SEQS=256
+      - VLLM_GPU_MEMORY_UTILIZATION=0.90
+
+      # Serving
+      - BATCH_SIZE_MAX=32
+      - BATCH_TIMEOUT_MS=10
+      - DYNAMIC_BATCHING_ENABLED=true
+      - REQUEST_QUEUE_SIZE=1000
+
+      # Routing
+      - ROUTING_STRATEGY=weighted
+      - ENABLE_AB_TESTING=true
+      - ENABLE_CANARY_DEPLOYMENT=true
+
+      # Tracing
+      - TRACING_ENABLED=true
+      - TRACING_EXPORTER=jaeger
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=6831
+      - JAEGER_COLLECTOR_ENDPOINT=http://jaeger:14268/api/traces
+      - OTEL_SERVICE_NAME=model-serving
+
+      # Monitoring
+      - PROMETHEUS_ENABLED=true
+      - PROMETHEUS_PORT=9090
+      - GPU_METRICS_ENABLED=true
+
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_CACHE_TTL_SECONDS=3600
+
+      # Database
+      - DATABASE_URL=postgresql+asyncpg://modeluser:modelpass@postgres:5432/model_serving
+      - DATABASE_POOL_SIZE=20
+
+      # GPU
+      - CUDA_VISIBLE_DEVICES=0
+      - GPU_MEMORY_FRACTION=0.90
+
+      # Health checks
+      - HEALTH_CHECK_INTERVAL_SECONDS=30
+      - STARTUP_TIMEOUT_SECONDS=300
+
+      # Rate limiting
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=1000
+      - RATE_LIMIT_STORAGE=redis
+
+      # Performance
+      - PRELOAD_MODELS=resnet50-fp16,bert-base-fp16
+      - ASYNC_WORKERS=4
+      - GRACEFUL_SHUTDOWN_TIMEOUT=30
+
+    # Port mappings
+    ports:
+      - "8000:8000"  # API server
+      - "9090:9090"  # Prometheus metrics
+
+    # Volume mounts
+    volumes:
+      # Model storage (persistent)
+      - model-cache:/app/models
+      # TensorRT engine cache (persistent)
+      - engine-cache:/app/engine_cache
+      # Application logs
+      - ./logs:/app/logs
+      # Configuration overrides
+      - ../.env:/app/.env:ro
+      # Source code (for development only)
+      # - ../src:/app/src:ro
+
+    # Dependencies
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+
+    # Networking
+    networks:
+      - model-serving-net
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+        labels: "service=model-serving"
+
+  # ===========================================================================
+  # Redis - Caching and Coordination
+  # ===========================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    hostname: redis
+
+    # Redis configuration
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis-data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - model-serving-net
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ===========================================================================
+  # PostgreSQL - Model Metadata and Analytics
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    hostname: postgres
+
+    environment:
+      - POSTGRES_DB=model_serving
+      - POSTGRES_USER=modeluser
+      - POSTGRES_PASSWORD=modelpass
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - PGDATA=/var/lib/postgresql/data/pgdata
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Initialize schema on first run
+      # - ../scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U modeluser -d model_serving"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - model-serving-net
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ===========================================================================
+  # Prometheus - Metrics Collection
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    hostname: prometheus
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+    ports:
+      - "9091:9090"  # Prometheus UI
+
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+
+    networks:
+      - model-serving-net
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ===========================================================================
+  # Grafana - Metrics Visualization
+  # ===========================================================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: grafana
+    hostname: grafana
+
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel
+
+    ports:
+      - "3000:3000"  # Grafana UI
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+
+    depends_on:
+      - prometheus
+
+    networks:
+      - model-serving-net
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ===========================================================================
+  # Jaeger - Distributed Tracing
+  # ===========================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: jaeger
+    hostname: jaeger
+
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=badger
+      - BADGER_EPHEMERAL=false
+      - BADGER_DIRECTORY_VALUE=/badger/data
+      - BADGER_DIRECTORY_KEY=/badger/key
+
+    ports:
+      - "5775:5775/udp"  # Zipkin compact thrift
+      - "6831:6831/udp"  # Jaeger compact thrift
+      - "6832:6832/udp"  # Jaeger binary thrift
+      - "5778:5778"      # Config endpoint
+      - "16686:16686"    # UI
+      - "14268:14268"    # Collector HTTP
+      - "14250:14250"    # Collector gRPC
+      - "9411:9411"      # Zipkin
+      - "4317:4317"      # OTLP gRPC
+      - "4318:4318"      # OTLP HTTP
+
+    volumes:
+      - jaeger-data:/badger
+
+    networks:
+      - model-serving-net
+
+    restart: unless-stopped
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+# =============================================================================
+# Networks Configuration
+# =============================================================================
+networks:
+  model-serving-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# Volumes Configuration
+# =============================================================================
+volumes:
+  # Persistent model cache
+  model-cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/models
+
+  # TensorRT engine cache
+  engine-cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/engines
+
+  # Redis data
+  redis-data:
+    driver: local
+
+  # PostgreSQL data
+  postgres-data:
+    driver: local
+
+  # Prometheus data
+  prometheus-data:
+    driver: local
+
+  # Grafana data
+  grafana-data:
+    driver: local
+
+  # Jaeger data
+  jaeger-data:
+    driver: local

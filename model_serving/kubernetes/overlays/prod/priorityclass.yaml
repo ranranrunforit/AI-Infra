@@ -1,0 +1,110 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: production-high
+  labels:
+    app: model-serving
+    environment: production
+description: "High priority for production workloads"
+# Value determines priority (higher = more important)
+# System critical pods typically use 2000000000
+# User pods should be < 2000000000
+value: 1000000
+# Global default determines if this is the default priority
+globalDefault: false
+# PreemptionPolicy determines if this priority class can preempt lower priority pods
+preemptionPolicy: PreemptLowerPriority
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: production-critical
+  labels:
+    app: model-serving
+    environment: production
+description: "Critical priority for essential production services"
+value: 1500000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+
+---
+# =============================================================================
+# Resource Quota for Production Namespace
+# Ensures resources are available for critical workloads
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: model-serving-quota
+  namespace: production
+  labels:
+    app: model-serving
+    environment: production
+spec:
+  hard:
+    # Compute resources
+    requests.cpu: "100"
+    requests.memory: "500Gi"
+    requests.nvidia.com/gpu: "20"
+    limits.cpu: "200"
+    limits.memory: "1000Gi"
+    limits.nvidia.com/gpu: "20"
+
+    # Storage resources
+    requests.storage: "2Ti"
+    persistentvolumeclaims: "10"
+
+    # Object counts
+    pods: "50"
+    services: "10"
+    configmaps: "20"
+    secrets: "20"
+
+---
+# =============================================================================
+# Limit Range - Set default and max resources for pods
+# =============================================================================
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: model-serving-limits
+  namespace: production
+  labels:
+    app: model-serving
+    environment: production
+spec:
+  limits:
+  # Container limits
+  - type: Container
+    default:
+      # Default limits if not specified
+      cpu: "4000m"
+      memory: "16Gi"
+    defaultRequest:
+      # Default requests if not specified
+      cpu: "2000m"
+      memory: "8Gi"
+    max:
+      # Maximum allowed
+      cpu: "16000m"
+      memory: "64Gi"
+      nvidia.com/gpu: "2"
+    min:
+      # Minimum required
+      cpu: "500m"
+      memory: "2Gi"
+
+  # Pod limits
+  - type: Pod
+    max:
+      cpu: "32000m"
+      memory: "128Gi"
+      nvidia.com/gpu: "4"
+
+  # PVC limits
+  - type: PersistentVolumeClaim
+    max:
+      storage: "1Ti"
+    min:
+      storage: "10Gi"

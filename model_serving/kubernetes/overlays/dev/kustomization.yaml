@@ -1,0 +1,205 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Development Environment Overlay
+# Lower resource requirements, debug features enabled, single replica
+# =============================================================================
+
+# Metadata
+metadata:
+  name: model-serving-dev
+  namespace: dev
+
+# Use base configuration
+bases:
+- ../../base
+
+# Override namespace
+namespace: dev
+
+# Environment-specific labels
+commonLabels:
+  environment: dev
+  deployment-type: development
+
+# Environment-specific annotations
+commonAnnotations:
+  environment: development
+  auto-reload: "true"
+
+# Name suffix to avoid conflicts
+nameSuffix: -dev
+
+# =============================================================================
+# Image Overrides - Use development image with debug tools
+# =============================================================================
+images:
+- name: ai-infra/model-serving
+  newName: ai-infra/model-serving
+  newTag: dev-latest
+  # Or use digest for reproducibility
+  # digest: sha256:...
+
+# =============================================================================
+# Replica Overrides - Single replica for dev
+# =============================================================================
+replicas:
+- name: model-serving
+  count: 1
+
+# =============================================================================
+# ConfigMap Patches - Override configuration for dev environment
+# =============================================================================
+configMapGenerator:
+- name: model-serving-config
+  behavior: merge
+  literals:
+  # Server
+  - SERVER_LOG_LEVEL=debug
+  - SERVER_RELOAD=true
+  - SERVER_WORKERS=1
+
+  # Debugging
+  - DEBUG_MODE=true
+  - PROFILE_REQUESTS=true
+  - VERBOSE_ERROR_MESSAGES=true
+  - SAVE_REQUEST_PAYLOADS=true
+
+  # Tracing - Sample everything in dev
+  - OTEL_TRACES_SAMPLER_ARG=1.0
+
+  # Rate limiting - Disabled in dev
+  - RATE_LIMIT_ENABLED=false
+
+  # Model configuration - Reduced for dev
+  - MAX_MODELS_LOADED=2
+  - PRELOAD_MODELS=resnet50-fp16
+
+  # GPU - Lower memory usage
+  - GPU_MEMORY_FRACTION=0.70
+  - VLLM_GPU_MEMORY_UTILIZATION=0.70
+
+  # Performance - Lower values for dev
+  - ASYNC_WORKERS=2
+  - THREAD_POOL_SIZE=4
+
+  # Environment marker
+  - ENVIRONMENT=development
+
+# =============================================================================
+# Patches - Modify base resources for dev environment
+# =============================================================================
+patches:
+# Patch deployment for dev-specific changes
+- target:
+    kind: Deployment
+    name: model-serving
+  patch: |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: model-serving
+    spec:
+      template:
+        spec:
+          containers:
+          - name: model-serving
+            # Lower resource requirements for dev
+            resources:
+              requests:
+                cpu: "1000m"
+                memory: "4Gi"
+                nvidia.com/gpu: "1"
+              limits:
+                cpu: "2000m"
+                memory: "8Gi"
+                nvidia.com/gpu: "1"
+            # Enable debug mode via command override
+            command:
+            - python
+            - -m
+            - uvicorn
+            - src.api.main:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --reload
+            - --log-level
+            - debug
+            # Reduce probe frequency for faster iteration
+            startupProbe:
+              initialDelaySeconds: 5
+              periodSeconds: 5
+              failureThreshold: 20
+            livenessProbe:
+              initialDelaySeconds: 10
+              periodSeconds: 30
+            readinessProbe:
+              initialDelaySeconds: 5
+              periodSeconds: 10
+
+# Patch HPA for dev - Lower thresholds
+- target:
+    kind: HorizontalPodAutoscaler
+    name: model-serving-hpa
+  patch: |-
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata:
+      name: model-serving-hpa
+    spec:
+      minReplicas: 1
+      maxReplicas: 3
+      metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 80
+
+# Patch PVC for smaller storage in dev
+- target:
+    kind: PersistentVolumeClaim
+    name: model-cache-pvc
+  patch: |-
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: model-cache-pvc
+    spec:
+      resources:
+        requests:
+          storage: 100Gi
+
+- target:
+    kind: PersistentVolumeClaim
+    name: engine-cache-pvc
+  patch: |-
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: engine-cache-pvc
+    spec:
+      resources:
+        requests:
+          storage: 50Gi
+
+# Disable PodDisruptionBudget in dev
+- target:
+    kind: PodDisruptionBudget
+    name: model-serving-pdb
+  patch: |-
+    $patch: delete
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata:
+      name: model-serving-pdb
+
+# =============================================================================
+# Additional Resources for Dev
+# =============================================================================
+resources:
+- dev-ingress.yaml

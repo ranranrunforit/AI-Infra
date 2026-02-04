@@ -1,0 +1,134 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Base Kustomization for Model Serving
+# This is the foundation that environment-specific overlays build upon
+# =============================================================================
+
+# Metadata
+metadata:
+  name: model-serving-base
+  namespace: default
+
+# Namespace to deploy resources to (can be overridden)
+namespace: default
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: model-serving
+  app.kubernetes.io/component: inference
+  app.kubernetes.io/part-of: ml-platform
+  app.kubernetes.io/managed-by: kustomize
+
+# Common annotations applied to all resources
+commonAnnotations:
+  author: "ai-infra-curriculum@joshua-ferguson.com"
+  documentation: "https://github.com/ai-infra-curriculum/ai-infra-senior-engineer-solutions"
+
+# List of resource configuration files
+resources:
+- deployment.yaml
+- service.yaml
+- configmap.yaml
+- hpa.yaml
+- servicemonitor.yaml
+- pvc.yaml
+- serviceaccount.yaml
+- networkpolicy.yaml
+
+# ConfigMap generator (alternative to configmap.yaml)
+# Uncomment to generate ConfigMap from env files
+# configMapGenerator:
+# - name: model-serving-config
+#   envs:
+#   - config.env
+
+# Secret generator (for non-sensitive defaults)
+# Real secrets should be managed by external secret managers
+secretGenerator:
+- name: model-serving-secrets
+  type: Opaque
+  literals:
+  - redis-password=changeme
+  - database-password=changeme
+  - api-keys=default-key-1,default-key-2
+
+# Images - define container images to use
+images:
+- name: ai-infra/model-serving
+  newName: ai-infra/model-serving
+  newTag: latest
+
+# Replicas - default replica count (overridden by HPA)
+# replicas:
+# - name: model-serving
+#   count: 2
+
+# Name prefix for all resources
+namePrefix: ""
+
+# Name suffix for all resources
+nameSuffix: ""
+
+# =============================================================================
+# Patches and Transformations
+# =============================================================================
+
+# JSON patches for fine-grained modifications
+# patches:
+# - target:
+#     kind: Deployment
+#     name: model-serving
+#   patch: |-
+#     - op: replace
+#       path: /spec/replicas
+#       value: 3
+
+# Strategic merge patches
+# patchesStrategicMerge:
+# - |-
+#   apiVersion: apps/v1
+#   kind: Deployment
+#   metadata:
+#     name: model-serving
+#   spec:
+#     replicas: 3
+
+# =============================================================================
+# Variables
+# =============================================================================
+
+# Define variables that can be referenced in resources
+# vars:
+# - name: SERVICE_NAME
+#   objref:
+#     kind: Service
+#     name: model-serving
+#     apiVersion: v1
+#   fieldref:
+#     fieldpath: metadata.name
+
+# =============================================================================
+# Generators
+# =============================================================================
+
+# Generate resources from other tools
+# generators:
+# - helm-chart-generator.yaml
+
+# =============================================================================
+# Replacements (for cross-resource references)
+# =============================================================================
+
+# replacements:
+# - source:
+#     kind: Service
+#     name: model-serving
+#     fieldPath: metadata.name
+#   targets:
+#   - select:
+#       kind: Deployment
+#       name: model-serving
+#     fieldPaths:
+#     - spec.template.spec.containers.[name=model-serving].env.[name=SERVICE_NAME].value

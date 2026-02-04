@@ -1,0 +1,207 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Staging Environment Overlay
+# Production-like configuration with moderate resources for testing
+# =============================================================================
+
+# Metadata
+metadata:
+  name: model-serving-staging
+  namespace: staging
+
+# Use base configuration
+bases:
+- ../../base
+
+# Override namespace
+namespace: staging
+
+# Environment-specific labels
+commonLabels:
+  environment: staging
+  deployment-type: staging
+
+# Environment-specific annotations
+commonAnnotations:
+  environment: staging
+  monitoring: "enhanced"
+
+# Name suffix
+nameSuffix: -staging
+
+# =============================================================================
+# Image Overrides - Use stable staging image
+# =============================================================================
+images:
+- name: ai-infra/model-serving
+  newName: ai-infra/model-serving
+  newTag: staging-v1.0.0
+
+# =============================================================================
+# Replica Overrides - Multiple replicas for testing HA
+# =============================================================================
+replicas:
+- name: model-serving
+  count: 2
+
+# =============================================================================
+# ConfigMap Patches - Staging-specific configuration
+# =============================================================================
+configMapGenerator:
+- name: model-serving-config
+  behavior: merge
+  literals:
+  # Server
+  - SERVER_LOG_LEVEL=info
+  - SERVER_WORKERS=4
+
+  # Debugging - Limited in staging
+  - DEBUG_MODE=false
+  - PROFILE_REQUESTS=false
+  - VERBOSE_ERROR_MESSAGES=true
+  - SAVE_REQUEST_PAYLOADS=false
+
+  # Tracing - Sample 50% in staging
+  - OTEL_TRACES_SAMPLER_ARG=0.5
+
+  # Rate limiting - Moderate limits
+  - RATE_LIMIT_ENABLED=true
+  - RATE_LIMIT_REQUESTS_PER_MINUTE=5000
+
+  # Model configuration
+  - MAX_MODELS_LOADED=3
+  - PRELOAD_MODELS=resnet50-fp16,bert-base-fp16
+
+  # GPU - Balanced usage
+  - GPU_MEMORY_FRACTION=0.85
+  - VLLM_GPU_MEMORY_UTILIZATION=0.85
+
+  # Performance
+  - ASYNC_WORKERS=4
+  - THREAD_POOL_SIZE=8
+
+  # Environment marker
+  - ENVIRONMENT=staging
+
+# =============================================================================
+# Patches - Modify resources for staging
+# =============================================================================
+patches:
+# Patch deployment for staging-specific changes
+- target:
+    kind: Deployment
+    name: model-serving
+  patch: |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: model-serving
+    spec:
+      strategy:
+        rollingUpdate:
+          maxSurge: 2
+          maxUnavailable: 0
+      template:
+        spec:
+          containers:
+          - name: model-serving
+            # Moderate resource requirements
+            resources:
+              requests:
+                cpu: "3000m"
+                memory: "12Gi"
+                nvidia.com/gpu: "1"
+              limits:
+                cpu: "6000m"
+                memory: "24Gi"
+                nvidia.com/gpu: "1"
+            # Staging-appropriate probe timings
+            startupProbe:
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              failureThreshold: 25
+            livenessProbe:
+              initialDelaySeconds: 20
+              periodSeconds: 30
+            readinessProbe:
+              initialDelaySeconds: 15
+              periodSeconds: 10
+
+# Patch HPA for staging - Moderate scaling
+- target:
+    kind: HorizontalPodAutoscaler
+    name: model-serving-hpa
+  patch: |-
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata:
+      name: model-serving-hpa
+    spec:
+      minReplicas: 2
+      maxReplicas: 10
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Pods
+            value: 1
+            periodSeconds: 60
+          - type: Percent
+            value: 10
+            periodSeconds: 60
+
+# Patch PVC for staging storage
+- target:
+    kind: PersistentVolumeClaim
+    name: model-cache-pvc
+  patch: |-
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: model-cache-pvc
+    spec:
+      resources:
+        requests:
+          storage: 300Gi
+
+- target:
+    kind: PersistentVolumeClaim
+    name: engine-cache-pvc
+  patch: |-
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: engine-cache-pvc
+    spec:
+      resources:
+        requests:
+          storage: 150Gi
+
+# Patch PDB for staging
+- target:
+    kind: PodDisruptionBudget
+    name: model-serving-pdb
+  patch: |-
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata:
+      name: model-serving-pdb
+    spec:
+      minAvailable: 1
+
+# =============================================================================
+# Additional Resources for Staging
+# =============================================================================
+resources:
+- staging-ingress.yaml

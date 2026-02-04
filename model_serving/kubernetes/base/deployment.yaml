@@ -1,0 +1,344 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-serving
+  labels:
+    app: model-serving
+    component: inference
+    tier: backend
+    version: v1
+spec:
+  # Replica count (overridden by HPA and environment-specific overlays)
+  replicas: 2
+
+  # Deployment strategy - RollingUpdate for zero-downtime deployments
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Maximum number of pods that can be created over desired replicas
+      maxUnavailable: 0  # Ensure at least one pod is always available during updates
+
+  # Selector for pods
+  selector:
+    matchLabels:
+      app: model-serving
+      component: inference
+
+  # Pod template
+  template:
+    metadata:
+      labels:
+        app: model-serving
+        component: inference
+        tier: backend
+        version: v1
+      annotations:
+        # Prometheus scraping configuration
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        # Force pod restart on config changes
+        checksum/config: "{{ include (print $.Template.BasePath '/configmap.yaml') . | sha256sum }}"
+
+    spec:
+      # Service account for RBAC
+      serviceAccountName: model-serving
+
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Node affinity - schedule on GPU nodes
+      affinity:
+        # Require GPU nodes
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu
+                operator: Exists
+              - key: node-role.kubernetes.io/gpu
+                operator: Exists
+          # Prefer nodes with specific GPU types (A100, V100, etc.)
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - NVIDIA-A100-SXM4-40GB
+                - NVIDIA-A100-SXM4-80GB
+          - weight: 80
+            preference:
+              matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - Tesla-V100-SXM2-16GB
+                - Tesla-V100-SXM2-32GB
+
+        # Pod anti-affinity - spread pods across nodes for high availability
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - model-serving
+              topologyKey: kubernetes.io/hostname
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - model-serving
+              topologyKey: topology.kubernetes.io/zone
+
+      # Tolerations for GPU nodes (in case they are tainted)
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/gpu
+        operator: Exists
+        effect: NoSchedule
+
+      # Init container - download models and prepare cache
+      initContainers:
+      - name: model-loader
+        image: ai-infra/model-serving:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Initializing model cache..."
+          mkdir -p /app/models /app/engine_cache /app/calibration_cache
+          echo "Model cache initialized"
+
+          # Optional: Pre-download models
+          # python -m src.scripts.download_models --models resnet50-fp16,bert-base-fp16
+
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/models
+        - name: engine-cache
+          mountPath: /app/engine_cache
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+      # Main application container
+      containers:
+      - name: model-serving
+        image: ai-infra/model-serving:latest
+        imagePullPolicy: IfNotPresent
+
+        # Security context for container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false  # Set to true if app supports it
+          capabilities:
+            drop:
+            - ALL
+
+        # Container ports
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        # Environment variables from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: model-serving-config
+
+        # Additional environment variables
+        env:
+        # Pod information
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+
+        # Redis credentials from Secret
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: model-serving-secrets
+              key: redis-password
+              optional: true
+
+        # Database credentials from Secret
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: model-serving-secrets
+              key: database-password
+
+        # API keys from Secret
+        - name: API_KEYS
+          valueFrom:
+            secretKeyRef:
+              name: model-serving-secrets
+              key: api-keys
+              optional: true
+
+        # Volume mounts
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/models
+        - name: engine-cache
+          mountPath: /app/engine_cache
+        - name: logs
+          mountPath: /app/logs
+        - name: tmp
+          mountPath: /tmp
+
+        # Resource requests and limits
+        resources:
+          requests:
+            # CPU: 4 cores minimum for inference workloads
+            cpu: "4000m"
+            # Memory: 16GB for model loading and inference
+            memory: "16Gi"
+            # GPU: 1 NVIDIA GPU
+            nvidia.com/gpu: "1"
+          limits:
+            # CPU: Allow bursting up to 8 cores
+            cpu: "8000m"
+            # Memory: Hard limit at 32GB
+            memory: "32Gi"
+            # GPU: Hard limit at 1 GPU
+            nvidia.com/gpu: "1"
+
+        # Startup probe - gives the app time to initialize
+        # Model loading can take several minutes
+        startupProbe:
+          httpGet:
+            path: /health/startup
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 30  # 5 minutes total (30 * 10s)
+
+        # Liveness probe - restart container if unhealthy
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3  # Restart after 3 consecutive failures
+
+        # Readiness probe - remove from service if not ready
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 2  # Mark unready after 2 consecutive failures
+
+        # Lifecycle hooks
+        lifecycle:
+          # Pre-stop hook - graceful shutdown
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "Initiating graceful shutdown..."
+                # Send SIGTERM to the application
+                kill -TERM 1
+                # Wait for graceful shutdown
+                sleep 30
+
+        # Command override (optional)
+        # command:
+        # - python
+        # - -m
+        # - uvicorn
+        # - src.api.main:app
+        # - --host
+        # - "0.0.0.0"
+        # - --port
+        # - "8000"
+        # - --workers
+        # - "4"
+
+      # Volumes
+      volumes:
+      # Persistent volume for model cache
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: model-cache-pvc
+
+      # Persistent volume for TensorRT engine cache
+      - name: engine-cache
+        persistentVolumeClaim:
+          claimName: engine-cache-pvc
+
+      # EmptyDir for logs (could also use PVC)
+      - name: logs
+        emptyDir:
+          sizeLimit: 10Gi
+
+      # EmptyDir for temporary files
+      - name: tmp
+        emptyDir:
+          sizeLimit: 5Gi
+
+      # DNS configuration
+      dnsPolicy: ClusterFirst
+
+      # Restart policy
+      restartPolicy: Always
+
+      # Termination grace period - allow time for graceful shutdown
+      terminationGracePeriodSeconds: 60
+
+      # Image pull secrets (if using private registry)
+      # imagePullSecrets:
+      # - name: docker-registry-secret

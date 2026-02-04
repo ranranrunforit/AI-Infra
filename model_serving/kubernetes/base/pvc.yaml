@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache-pvc
+  labels:
+    app: model-serving
+    component: storage
+    storage-type: model-cache
+spec:
+  # Access mode - ReadWriteMany for shared access across pods
+  accessModes:
+  - ReadWriteMany
+
+  # Storage class - use fast SSD storage for model cache
+  storageClassName: fast-ssd  # Update based on your cluster
+
+  # Requested storage size
+  resources:
+    requests:
+      storage: 500Gi  # Adjust based on model sizes
+
+  # Volume mode - Filesystem (default)
+  volumeMode: Filesystem
+
+  # Selector for specific PV (optional)
+  # selector:
+  #   matchLabels:
+  #     type: model-cache
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: engine-cache-pvc
+  labels:
+    app: model-serving
+    component: storage
+    storage-type: engine-cache
+spec:
+  # Access mode - ReadWriteMany for shared engine cache
+  accessModes:
+  - ReadWriteMany
+
+  # Storage class - use fast SSD for TensorRT engines
+  storageClassName: fast-ssd
+
+  # Requested storage size for TensorRT engine cache
+  resources:
+    requests:
+      storage: 200Gi
+
+  volumeMode: Filesystem
+
+---
+# =============================================================================
+# StorageClass definitions (examples - adjust for your cloud provider)
+# =============================================================================
+
+# Example for GKE (Google Kubernetes Engine)
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-ssd
+  replication-type: regional-pd  # For high availability
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+
+# Example for EKS (Amazon Elastic Kubernetes Service)
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd-aws
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  iops: "16000"
+  throughput: "1000"
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+
+# Example for AKS (Azure Kubernetes Service)
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd-azure
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: Premium_LRS
+  cachingMode: ReadWrite
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Retain

@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-serving
+  labels:
+    app: model-serving
+    component: inference
+    tier: backend
+  annotations:
+    # Service discovery annotations
+    service.kubernetes.io/topology-aware-hints: "auto"
+    # Load balancer annotations (cloud-specific)
+    # cloud.google.com/load-balancer-type: "Internal"
+    # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+spec:
+  # Service type - ClusterIP for internal services, LoadBalancer for external
+  type: ClusterIP
+
+  # Session affinity for consistent routing (optional)
+  # Useful for stateful operations or caching
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
+
+  # Port configuration
+  ports:
+  # Main HTTP API port
+  - name: http
+    port: 8000          # Service port (accessed by other services)
+    targetPort: http    # Pod port (named port from deployment)
+    protocol: TCP
+    # nodePort: 30800   # Optional: for NodePort service type
+
+  # Prometheus metrics port
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+    # nodePort: 30900   # Optional: for NodePort service type
+
+  # Selector to match pods
+  selector:
+    app: model-serving
+    component: inference
+
+  # IP families (IPv4/IPv6 support)
+  ipFamilyPolicy: PreferDualStack
+  ipFamilies:
+  - IPv4
+  - IPv6
+
+  # Internal traffic policy - prefer local endpoints for better performance
+  internalTrafficPolicy: Local
+
+---
+# Headless service for StatefulSet-like behavior or direct pod access
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-serving-headless
+  labels:
+    app: model-serving
+    component: inference
+    tier: backend
+    service-type: headless
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service
+
+  # Publish not ready addresses for service discovery
+  publishNotReadyAddresses: true
+
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+
+  selector:
+    app: model-serving
+    component: inference
+
+---
+# External service for admin/monitoring access (optional)
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-serving-external
+  labels:
+    app: model-serving
+    component: inference
+    tier: backend
+    service-type: external
+spec:
+  type: LoadBalancer
+
+  # Load balancer source ranges (restrict access)
+  loadBalancerSourceRanges:
+  - 10.0.0.0/8      # Internal network
+  - 172.16.0.0/12   # Private network
+  # - YOUR_OFFICE_IP/32  # Your office IP
+
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8000
+    protocol: TCP
+
+  selector:
+    app: model-serving
+    component: inference
+
+  # Preserve client source IP
+  externalTrafficPolicy: Local

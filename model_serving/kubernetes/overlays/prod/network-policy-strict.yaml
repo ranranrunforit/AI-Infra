@@ -1,0 +1,224 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: model-serving-strict
+  namespace: production
+  labels:
+    app: model-serving
+    environment: production
+spec:
+  # Apply to model-serving pods
+  podSelector:
+    matchLabels:
+      app: model-serving
+      component: inference
+
+  policyTypes:
+  - Ingress
+  - Egress
+
+  # =============================================================================
+  # Strict Ingress Rules - Production
+  # =============================================================================
+  ingress:
+  # Allow traffic ONLY from ingress controllers
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+
+  # Allow Prometheus to scrape metrics (from observability namespace only)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: observability
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+
+  # Allow health checks from load balancer
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-proxy
+    ports:
+    - protocol: TCP
+      port: 8000
+
+  # =============================================================================
+  # Strict Egress Rules - Production
+  # =============================================================================
+  egress:
+  # DNS resolution (required)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Redis (specific namespace and pod)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: redis
+          environment: production
+    - podSelector:
+        matchLabels:
+          app: redis
+          role: master
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  # PostgreSQL (specific namespace and pod)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: database
+          environment: production
+    - podSelector:
+        matchLabels:
+          app: postgres
+          role: master
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Jaeger (observability namespace)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: observability
+    - podSelector:
+        matchLabels:
+          app: jaeger
+    ports:
+    - protocol: UDP
+      port: 6831
+    - protocol: TCP
+      port: 14268
+
+  # Prometheus Pushgateway
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: observability
+    - podSelector:
+        matchLabels:
+          app: prometheus-pushgateway
+    ports:
+    - protocol: TCP
+      port: 9091
+
+  # Model Registry (ML platform namespace)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: ml-platform
+          environment: production
+    - podSelector:
+        matchLabels:
+          app: model-registry
+    ports:
+    - protocol: TCP
+      port: 5000
+
+  # HTTPS egress (for model downloads) - restricted to specific CIDRs
+  - to:
+    # Allow only specific IP ranges (example: S3 endpoints, GCS endpoints)
+    - ipBlock:
+        cidr: 0.0.0.0/0  # Adjust to specific cloud provider IP ranges
+        except:
+        - 169.254.169.254/32  # Block metadata service
+        - 10.0.0.0/8          # Block internal
+        - 172.16.0.0/12       # Block internal
+        - 192.168.0.0/16      # Block internal
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# =============================================================================
+# Network Policy - Deny All by Default (Production)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# =============================================================================
+# Network Policy - Allow DNS (Production)
+# Required for any pod in the namespace
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# =============================================================================
+# Network Policy - Prometheus Can Scrape All (Production)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scraping
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      prometheus: scrape
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: observability
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090

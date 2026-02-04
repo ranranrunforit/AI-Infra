@@ -1,0 +1,224 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-serving-config
+  labels:
+    app: model-serving
+    component: inference
+data:
+  # =============================================================================
+  # Server Configuration
+  # =============================================================================
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8000"
+  SERVER_WORKERS: "4"
+  SERVER_LOG_LEVEL: "info"
+  SERVER_RELOAD: "false"
+
+  # =============================================================================
+  # Model Configuration
+  # =============================================================================
+  MODEL_CACHE_DIR: "/app/models"
+  MODEL_WARMUP_ENABLED: "true"
+  MODEL_WARMUP_ITERATIONS: "10"
+  DEFAULT_MODEL_PRECISION: "fp16"
+  MAX_MODELS_LOADED: "5"
+
+  # =============================================================================
+  # TensorRT Configuration
+  # =============================================================================
+  TENSORRT_WORKSPACE_SIZE: "4294967296"  # 4GB
+  TENSORRT_MAX_BATCH_SIZE: "32"
+  TENSORRT_MIN_TIMING_ITERATIONS: "2"
+  TENSORRT_AVG_TIMING_ITERATIONS: "4"
+  TENSORRT_ENGINE_CACHE_DIR: "/app/engine_cache"
+  TENSORRT_OPTIMIZATION_LEVEL: "3"
+  TENSORRT_FP16_ENABLED: "true"
+  TENSORRT_INT8_ENABLED: "false"
+  TENSORRT_CALIBRATION_CACHE: "/app/calibration_cache"
+
+  # =============================================================================
+  # vLLM Configuration
+  # =============================================================================
+  VLLM_TENSOR_PARALLEL_SIZE: "1"
+  VLLM_MAX_NUM_BATCHED_TOKENS: "16384"
+  VLLM_MAX_NUM_SEQS: "256"
+  VLLM_GPU_MEMORY_UTILIZATION: "0.90"
+  VLLM_ENABLE_PREFIX_CACHING: "true"
+  VLLM_ENABLE_CHUNKED_PREFILL: "false"
+  VLLM_MAX_MODEL_LEN: "4096"
+  VLLM_SWAP_SPACE: "8"  # GB
+
+  # =============================================================================
+  # Serving Configuration
+  # =============================================================================
+  BATCH_SIZE_MIN: "1"
+  BATCH_SIZE_MAX: "32"
+  BATCH_TIMEOUT_MS: "10"
+  DYNAMIC_BATCHING_ENABLED: "true"
+  REQUEST_QUEUE_SIZE: "1000"
+  MAX_CONCURRENT_REQUESTS: "100"
+
+  # =============================================================================
+  # Routing Configuration
+  # =============================================================================
+  ROUTING_STRATEGY: "weighted"  # Options: round_robin, weighted, least_latency, ab_test, canary
+  ENABLE_AB_TESTING: "true"
+  ENABLE_CANARY_DEPLOYMENT: "true"
+  CANARY_TRAFFIC_PERCENTAGE: "10"
+  AB_TEST_MIN_SAMPLES: "1000"
+  AB_TEST_CONFIDENCE_LEVEL: "0.95"
+
+  # =============================================================================
+  # Distributed Tracing
+  # =============================================================================
+  TRACING_ENABLED: "true"
+  TRACING_EXPORTER: "jaeger"  # Options: jaeger, otlp, console
+  JAEGER_AGENT_HOST: "jaeger-agent.observability.svc.cluster.local"
+  JAEGER_AGENT_PORT: "6831"
+  JAEGER_COLLECTOR_ENDPOINT: "http://jaeger-collector.observability.svc.cluster.local:14268/api/traces"
+  OTEL_SERVICE_NAME: "model-serving"
+  OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+  OTEL_TRACES_SAMPLER_ARG: "0.1"  # Sample 10% of traces in production
+  TRACE_CONTEXT_PROPAGATION: "true"
+
+  # =============================================================================
+  # Monitoring Configuration
+  # =============================================================================
+  PROMETHEUS_ENABLED: "true"
+  PROMETHEUS_PORT: "9090"
+  PROMETHEUS_PUSHGATEWAY_URL: "http://prometheus-pushgateway.observability.svc.cluster.local:9091"
+  METRICS_EXPORT_INTERVAL_SECONDS: "15"
+  GPU_METRICS_ENABLED: "true"
+
+  # =============================================================================
+  # Logging Configuration
+  # =============================================================================
+  LOG_LEVEL: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  LOG_FORMAT: "json"  # json, console
+  LOG_FILE: "/app/logs/model-serving.log"
+  LOG_ROTATION_SIZE_MB: "100"
+  LOG_RETENTION_DAYS: "30"
+  STRUCTURED_LOGGING_ENABLED: "true"
+
+  # =============================================================================
+  # Redis Configuration
+  # =============================================================================
+  REDIS_HOST: "redis-master.redis.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_SSL: "false"
+  REDIS_CACHE_TTL_SECONDS: "3600"
+  REDIS_MAX_CONNECTIONS: "50"
+
+  # =============================================================================
+  # Database Configuration
+  # =============================================================================
+  DATABASE_URL: "postgresql+asyncpg://modeluser@postgres.database.svc.cluster.local:5432/model_serving"
+  DATABASE_POOL_SIZE: "20"
+  DATABASE_MAX_OVERFLOW: "10"
+  DATABASE_POOL_TIMEOUT: "30"
+  DATABASE_ECHO: "false"
+
+  # =============================================================================
+  # GPU Configuration
+  # =============================================================================
+  CUDA_VISIBLE_DEVICES: "0"
+  CUDA_DEVICE_ORDER: "PCI_BUS_ID"
+  GPU_MEMORY_FRACTION: "0.90"
+  ALLOW_GROWTH: "true"
+  FORCE_CPU_FALLBACK: "false"
+
+  # =============================================================================
+  # Health Check Configuration
+  # =============================================================================
+  HEALTH_CHECK_INTERVAL_SECONDS: "30"
+  LIVENESS_PROBE_PATH: "/health/live"
+  READINESS_PROBE_PATH: "/health/ready"
+  STARTUP_PROBE_PATH: "/health/startup"
+  STARTUP_TIMEOUT_SECONDS: "300"
+
+  # =============================================================================
+  # Rate Limiting
+  # =============================================================================
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_REQUESTS_PER_MINUTE: "1000"
+  RATE_LIMIT_BURST: "100"
+  RATE_LIMIT_STORAGE: "redis"
+
+  # =============================================================================
+  # Security
+  # =============================================================================
+  ENABLE_CORS: "true"
+  CORS_ORIGINS: "*"
+  CORS_CREDENTIALS: "true"
+  CORS_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
+  CORS_HEADERS: "*"
+  API_KEY_HEADER: "X-API-Key"
+  REQUIRE_API_KEY: "false"
+
+  # =============================================================================
+  # Performance Tuning
+  # =============================================================================
+  PRELOAD_MODELS: "resnet50-fp16,bert-base-fp16"
+  ASYNC_WORKERS: "4"
+  THREAD_POOL_SIZE: "8"
+  CONNECTION_POOL_SIZE: "100"
+  KEEP_ALIVE_TIMEOUT: "65"
+  GRACEFUL_SHUTDOWN_TIMEOUT: "30"
+
+  # =============================================================================
+  # Feature Flags
+  # =============================================================================
+  ENABLE_MODEL_VERSIONING: "true"
+  ENABLE_SHADOW_TRAFFIC: "false"
+  ENABLE_REQUEST_CACHING: "true"
+  ENABLE_RESPONSE_COMPRESSION: "true"
+  ENABLE_STREAMING_INFERENCE: "true"
+
+  # =============================================================================
+  # Debugging
+  # =============================================================================
+  DEBUG_MODE: "false"
+  PROFILE_REQUESTS: "false"
+  PROFILE_OUTPUT_DIR: "/app/profiles"
+  SAVE_REQUEST_PAYLOADS: "false"
+  VERBOSE_ERROR_MESSAGES: "false"
+
+  # =============================================================================
+  # Model Registry
+  # =============================================================================
+  MODEL_REGISTRY_URL: "http://model-registry.ml-platform.svc.cluster.local:5000"
+  MODEL_REGISTRY_SYNC_INTERVAL_SECONDS: "300"
+  AUTO_DOWNLOAD_MODELS: "true"
+  MODEL_DOWNLOAD_RETRIES: "3"
+
+  # =============================================================================
+  # Autoscaling Triggers
+  # =============================================================================
+  HPA_ENABLED: "true"
+  HPA_MIN_REPLICAS: "2"
+  HPA_MAX_REPLICAS: "20"
+  HPA_TARGET_CPU_UTILIZATION: "70"
+  HPA_TARGET_GPU_UTILIZATION: "80"
+  HPA_TARGET_LATENCY_MS: "100"
+  HPA_SCALE_UP_STABILIZATION_SECONDS: "60"
+  HPA_SCALE_DOWN_STABILIZATION_SECONDS: "300"
+
+  # =============================================================================
+  # Alerting
+  # =============================================================================
+  ALERT_WEBHOOK_URL: ""
+  ALERT_ON_HIGH_LATENCY: "true"
+  ALERT_LATENCY_THRESHOLD_MS: "1000"
+  ALERT_ON_HIGH_ERROR_RATE: "true"
+  ALERT_ERROR_RATE_THRESHOLD_PERCENT: "5"
+  ALERT_ON_GPU_OOM: "true"
+
+  # =============================================================================
+  # Backup and Recovery
+  # =============================================================================
+  AUTO_CHECKPOINT_ENABLED: "false"
+  CHECKPOINT_INTERVAL_SECONDS: "3600"
+  CHECKPOINT_DIR: "/app/checkpoints"
+  DISASTER_RECOVERY_ENABLED: "false"

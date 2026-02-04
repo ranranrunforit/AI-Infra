@@ -1,0 +1,242 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: model-serving
+  labels:
+    app: model-serving
+    component: inference
+spec:
+  # Apply to pods with these labels
+  podSelector:
+    matchLabels:
+      app: model-serving
+      component: inference
+
+  # Policy types to apply
+  policyTypes:
+  - Ingress
+  - Egress
+
+  # =============================================================================
+  # Ingress Rules - What can connect TO model-serving pods
+  # =============================================================================
+  ingress:
+  # Allow traffic from ingress controllers
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+
+  # Allow traffic from API gateway
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: api-gateway
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8000
+
+  # Allow traffic from other model-serving pods (for internal communication)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: model-serving
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+
+  # Allow Prometheus to scrape metrics
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: observability
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+
+  # Allow from same namespace (for testing)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: default
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+
+  # =============================================================================
+  # Egress Rules - What model-serving pods can connect TO
+  # =============================================================================
+  egress:
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Allow connection to Redis
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: redis
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  # Allow connection to PostgreSQL
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: database
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow connection to Jaeger
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: observability
+    - podSelector:
+        matchLabels:
+          app: jaeger
+    ports:
+    - protocol: UDP
+      port: 6831
+    - protocol: TCP
+      port: 14268
+
+  # Allow connection to Prometheus Pushgateway
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: observability
+    - podSelector:
+        matchLabels:
+          app: prometheus-pushgateway
+    ports:
+    - protocol: TCP
+      port: 9091
+
+  # Allow connection to Model Registry
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: ml-platform
+    - podSelector:
+        matchLabels:
+          app: model-registry
+    ports:
+    - protocol: TCP
+      port: 5000
+
+  # Allow HTTPS egress for downloading models
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # Allow HTTP egress for model downloads
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 80
+
+  # Allow egress to same namespace
+  - to:
+    - podSelector: {}
+
+---
+# =============================================================================
+# NetworkPolicy for Redis
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-access
+  namespace: redis
+  labels:
+    app: redis
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+
+  policyTypes:
+  - Ingress
+
+  ingress:
+  # Allow from model-serving
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: default
+    - podSelector:
+        matchLabels:
+          app: model-serving
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# =============================================================================
+# NetworkPolicy for PostgreSQL
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-access
+  namespace: database
+  labels:
+    app: postgres
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+
+  policyTypes:
+  - Ingress
+
+  ingress:
+  # Allow from model-serving
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: default
+    - podSelector:
+        matchLabels:
+          app: model-serving
+    ports:
+    - protocol: TCP
+      port: 5432
