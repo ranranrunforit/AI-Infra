@@ -35,8 +35,8 @@ vLLM, RAG, Pinecone Vector DB, Kubernetes, Prometheus, Grafana, Docker
 
 **[Distributed Training Platform](./distributed_training)**
 
-Ray, Kubernetes, Docker
+Ray, NCCL, Prometheus, Grafana, DCGM, Kubernetes, Docker
 
 **[High-Performance Model Serving with TensorRT-LLM](./model_serving)**
 
-FastAPI, TensorRT, vLLM, Prometheus, Jaeger
+FastAPI, TensorRT, vLLM, Prometheus, Jaeger, Grafana
