@@ -1,0 +1,57 @@
+# Training Configuration for RTX 5070 (12GB VRAM)
+# This configuration is optimized for single GPU training
+
+model:
+  name: resnet34
+  pretrained: false
+  num_classes: 10  # CIFAR-10
+  use_gradient_checkpointing: false
+
+dataset:
+  name: cifar10
+  data_path: ./data
+  num_workers: 4
+  prefetch_factor: 2
+  pin_memory: true
+
+training:
+  epochs: 100
+  batch_size: 256  # Can be increased to 512 with FP16
+  learning_rate: 0.1
+  momentum: 0.9
+  weight_decay: 0.0005
+  warmup_epochs: 5
+
+distributed:
+  num_workers: 1
+  gpus_per_worker: 1
+  backend: nccl
+  use_gpu: true
+
+optimization:
+  mixed_precision: fp16  # 2x faster, saves memory
+  gradient_accumulation_steps: 1
+  gradient_clip_val: null  # Set to 1.0 if training is unstable
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: ./checkpoints
+  checkpoint_freq: 500  # Save every 500 steps
+  keep_last_n: 3
+  save_best: true
+
+logging:
+  log_dir: ./logs
+  log_freq: 10
+  use_tensorboard: true
+  use_wandb: false
+
+# For larger models (ResNet50, ResNet101):
+# - Reduce batch_size to 128 or 64
+# - Enable gradient_checkpointing: true
+# - Consider gradient_accumulation_steps: 2
+
+# For multi-GPU training:
+# - Set num_workers to number of GPUs
+# - Multiply batch_size by num_workers for same effective batch size
+# - Scale learning_rate proportionally (e.g., lr * num_workers)

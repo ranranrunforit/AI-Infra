@@ -1,0 +1,23 @@
+model:
+  name: resnet50
+  num_classes: 10
+  pretrained: false
+
+training:
+  epochs: 90
+  batch_size: 256
+  learning_rate: 0.1
+  momentum: 0.9
+  weight_decay: 0.0001
+  warmup_epochs: 5
+
+distributed:
+  num_workers: 1
+  gpus_per_worker: 1
+  mixed_precision: fp16
+  gradient_accumulation_steps: 1
+
+checkpointing:
+  enabled: true
+  frequency: 1000
+  keep_last_n: 3

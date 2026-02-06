@@ -1,0 +1,168 @@
+---
+# Kubernetes Deployment for Single GPU (RTX 5070)
+# Optimized for local development with Minikube/kind
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ray-cluster
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ray-serviceaccount
+  namespace: ray-cluster
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ray-head
+  namespace: ray-cluster
+spec:
+  type: NodePort
+  selector:
+    app: ray
+    component: head
+  ports:
+  - name: client
+    port: 10001
+    targetPort: 10001
+    nodePort: 30001
+  - name: dashboard
+    port: 8265
+    targetPort: 8265
+    nodePort: 30265
+  - name: redis
+    port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ray-head
+  namespace: ray-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ray
+      component: head
+  template:
+    metadata:
+      labels:
+        app: ray
+        component: head
+    spec:
+      serviceAccountName: ray-serviceaccount
+      containers:
+      - name: ray-head
+        image: distributed-training:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          ray start --head \
+            --port=6379 \
+            --dashboard-host=0.0.0.0 \
+            --dashboard-port=8265 \
+            --num-cpus=2 \
+            --num-gpus=0 \
+            --block
+        ports:
+        - containerPort: 6379
+        - containerPort: 8265
+        - containerPort: 10001
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        volumeMounts:
+        - name: data
+          mountPath: /mnt/data
+        - name: checkpoints
+          mountPath: /mnt/checkpoints
+      volumes:
+      - name: data
+        hostPath:
+          path: /tmp/ray-data
+          type: DirectoryOrCreate
+      - name: checkpoints
+        hostPath:
+          path: /tmp/ray-checkpoints
+          type: DirectoryOrCreate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ray-worker
+  namespace: ray-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ray
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: ray
+        component: worker
+    spec:
+      serviceAccountName: ray-serviceaccount
+      containers:
+      - name: ray-worker
+        image: distributed-training:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          until ray health-check --address=ray-head:6379 2>/dev/null; do
+            echo "Waiting for Ray head..."
+            sleep 2
+          done
+          ray start \
+            --address=ray-head:6379 \
+            --num-cpus=4 \
+            --num-gpus=1 \
+            --block
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        resources:
+          requests:
+            cpu: "4"
+            memory: "8Gi"
+            nvidia.com/gpu: "1"
+          limits:
+            cpu: "8"
+            memory: "16Gi"
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - name: data
+          mountPath: /mnt/data
+        - name: checkpoints
+          mountPath: /mnt/checkpoints
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: data
+        hostPath:
+          path: /tmp/ray-data
+          type: DirectoryOrCreate
+      - name: checkpoints
+        hostPath:
+          path: /tmp/ray-checkpoints
+          type: DirectoryOrCreate
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 4Gi
