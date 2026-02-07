@@ -277,6 +277,117 @@ docker push your-registry/ray-training:latest
 
 # Update Kubernetes manifests with your image
 sed -i 's|IMAGE_PLACEHOLDER|your-registry/ray-training:latest|g' kubernetes/*.yaml
+
+
+
+# Build the Docker image (one-time, ~10 minutes)
+docker build -t ray-training-laptop:latest .
+
+# Start Ray cluster
+docker-compose up -d
+
+# Verify it's running
+docker-compose ps
+
+# Check Ray Dashboard
+# Open browser: http://localhost:8265
+
+
+
+# Quick 2-minute test (ResNet-18, CIFAR-10, 1 epoch)
+docker exec ray-head python -m src.training.distributed_trainer \
+    --model resnet18 \
+    --dataset cifar10 \
+    --epochs 1 \
+    --batch-size 256 \
+    --mixed-precision fp16
+
+# Monitor GPU (in another terminal)
+nvidia-smi -l 1
+
+
+# ResNet-18, 10 epochs, ~15 minutes
+docker exec ray-head python -m src.training.distributed_trainer \
+    --model resnet18 \
+    --dataset cifar10 \
+    --epochs 10 \
+    --batch-size 512 \
+    --mixed-precision fp16 \
+    --checkpoint-freq 500
+
+# ResNet-50, 90 epochs, ~3 hours
+docker exec ray-head python -m src.training.distributed_trainer \
+    --model resnet50 \
+    --dataset cifar10 \
+    --epochs 90 \
+    --batch-size 256 \
+    --lr 0.1 \
+    --warmup-epochs 5 \
+    --mixed-precision fp16 \
+    --checkpoint-dir /mnt/checkpoints
+
+# ResNet-101 with gradient accumulation
+docker exec ray-head python -m src.training.distributed_trainer \
+    --model resnet101 \
+    --dataset cifar10 \
+    --epochs 50 \
+    --batch-size 128 \
+    --gradient-accumulation-steps 4 \
+    --mixed-precision fp16 \
+    --use-gradient-checkpointing
+
+# ViT-B/16
+docker exec ray-head python -m src.training.distributed_trainer \
+    --model vit_b_16 \
+    --dataset cifar10 \
+    --epochs 50 \
+    --batch-size 128 \
+    --lr 0.001 \
+    --mixed-precision fp16
+
+# Resume training
+docker exec ray-head python -m src.training.distributed_trainer \
+    --model resnet50 \
+    --dataset cifar10 \
+    --resume-from /mnt/checkpoints/checkpoint_latest.pt \
+    --epochs 90
+
+
+
+# Rebuild
+docker-compose build --no-cache
+
+# Start
+docker-compose up -d
+
+# Stop containers
+docker-compose down
+
+
+
+# Access dashboard
+start http://localhost:8265
+
+# Open in browser: http://localhost:8265
+# Go to: Jobs tab → Click your job → Logs tab
+
+# Window 1 - Run training:
+docker exec ray-head python -m src.training.distributed_trainer --model resnet18 --dataset cifar10 --epochs 10
+
+# Window 2 - Watch logs:
+docker logs -f ray-head\
+
+
+
+# Check Ray status
+docker exec ray-head ray status
+
+# Check if dashboard is running inside container
+docker exec ray-head curl http://localhost:8265
+
+# If working inside, it's a port mapping issue
+# Restart container
+docker-compose restart ray-head
 ```
 
 ---
