@@ -339,16 +339,6 @@ class DistributedTrainer:
                     f"Throughput: {throughput:.1f} samples/sec"
                 )
                 
-                # Print to console (visible in Ray Train)
-                print(
-                    f"Epoch [{epoch}/{self.config.epochs}] "
-                    f"Batch [{batch_idx+1}/{num_batches}] "
-                    f"Loss: {metrics['loss']:.4f} "
-                    f"Acc: {metrics['accuracy']:.2f}% "
-                    f"LR: {metrics['lr']:.6f} "
-                    f"Throughput: {throughput:.1f} samples/sec"
-                )
-                
                 # Track metrics
                 self.metrics_tracker.log(metrics, self.global_step)
             
@@ -372,18 +362,6 @@ class DistributedTrainer:
             f"Avg Acc: {epoch_metrics['accuracy']*100:.2f}% | "
             f"Throughput: {epoch_metrics['throughput']:.1f} samples/sec | "
             f"Time: {epoch_time:.1f}s"
-        )
-        
-        # Print to console
-        print(
-            f"\n{'='*80}\n"
-            f"Epoch [{epoch}/{self.config.epochs}] COMPLETED\n"
-            f"{'='*80}\n"
-            f"Average Loss:     {epoch_metrics['loss']:.4f}\n"
-            f"Average Accuracy: {epoch_metrics['accuracy']*100:.2f}%\n"
-            f"Throughput:       {epoch_metrics['throughput']:.1f} samples/sec\n"
-            f"Time:             {epoch_time:.1f}s\n"
-            f"{'='*80}\n"
         )
         
         return epoch_metrics
@@ -423,7 +401,6 @@ class DistributedTrainer:
         }
         
         logger.info(f"Validation | Loss: {val_loss:.4f} | Acc: {val_accuracy*100:.2f}%")
-        print(f"\n>>> VALIDATION | Loss: {val_loss:.4f} | Acc: {val_accuracy*100:.2f}% <<<\n")
 
     
         # Update best accuracy
@@ -627,14 +604,34 @@ def main():
     # When running in Docker, connect to the Ray head started by docker-compose
     # The Ray head is already running with dashboard enabled
     if args.ray_address:
-        ray.init(address=args.ray_address)
+        ray.init(
+            address=args.ray_address,
+            log_to_driver=True,  # Show worker logs in terminal
+            logging_level=logging.INFO,
+            runtime_env={
+                    "env_vars": {
+                        "PYTHONUNBUFFERED": "1",
+                        "RAY_LOG_TO_DRIVER": "1"
+                    }
+                }
+        )
     else:
         # Check if Ray is already running (started by Docker)
         if ray.is_initialized():
             logger.info("Ray is already initialized")
         else:
             # Connect to local Ray head (started by docker-compose on port 6379)
-            ray.init(address="auto")
+            ray.init(
+                address="auto",
+                log_to_driver=True,  # Show worker logs in terminal
+                logging_level=logging.INFO,
+                runtime_env={
+                    "env_vars": {
+                        "PYTHONUNBUFFERED": "1",
+                        "RAY_LOG_TO_DRIVER": "1"
+                    }
+                }
+            )
     
     # Log dashboard URL
     try:
@@ -706,6 +703,9 @@ def main():
 
     import os
     os.environ['RAY_AIR_NEW_OUTPUT'] = '1'  # Enable new verbose output
+    os.environ['RAY_DEDUP_LOGS'] = '0'      # ADD THIS - show all logs
+    os.environ['RAY_COLOR_PREFIX'] = '1'    # ADD THIS - blue colors!
+    os.environ["PYTHONUNBUFFERED"] = "1"
     os.environ['TUNE_DISABLE_AUTO_CALLBACK_LOGGERS'] = '0'  # Keep loggers
     
     # Train
