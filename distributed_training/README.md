@@ -264,6 +264,29 @@ kubectl apply -f monitoring/dcgm/
 # Verify deployment
 kubectl get pods -n ray-cluster
 kubectl get pods -n monitoring
+
+
+
+
+# Quick Setup (5 Steps):
+# 1. Enable Kubernetes with Kubeadm
+Docker Desktop → Settings (gear icon) → Kubernetes tab
+✓ Enable Kubernetes
+Cluster Type: Kubeadm
+Version: v1.34.1 (default)
+Click "Apply & Restart"
+Wait 3-5 minutes for green "Kubernetes is running" indicator
+# 2. Verify It's Working
+kubectl get nodes
+# Should show: docker-desktop   Ready   control-plane
+# 3. Install GPU Device Plugin
+kubectl create -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.0/nvidia-device-plugin.yml
+# 4. Deploy Ray Cluster
+kubectl apply -f deployment-fixed.yaml
+# 5. Submit Training Job
+kubectl apply -f training-job.yaml
+kubectl logs -f -n ray-cluster job/resnet18-cifar10-training
+
 ```
 
 ### Docker Image Build
