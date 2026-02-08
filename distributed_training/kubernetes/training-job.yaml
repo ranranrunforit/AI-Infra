@@ -1,0 +1,67 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: resnet18-cifar10-training
+  namespace: ray-cluster
+spec:
+  template:
+    metadata:
+      labels:
+        app: ray-training-job
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: training
+        image: ray-training-laptop:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Waiting for Ray cluster to be ready..."
+          until ray health-check --address=ray-head:6379 2>/dev/null; do
+            echo "Ray cluster not ready, waiting..."
+            sleep 2
+          done
+          echo "Ray cluster is ready!"
+          
+          echo "Connecting to Ray at ray-head:6379"
+          
+          # Run training with explicit Ray address
+          python -m src.training.distributed_trainer \
+            --ray-address ray-head:6379 \
+            --model resnet18 \
+            --dataset cifar10 \
+            --epochs 10 \
+            --batch-size 256 \
+            --mixed-precision fp16 \
+            --num-workers 1 \
+            --gpus-per-worker 1
+          
+          echo "Training completed!"
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: RAY_ADDRESS
+          value: "ray-head:6379"
+        volumeMounts:
+        - name: data
+          mountPath: /mnt/data
+        - name: checkpoints
+          mountPath: /mnt/checkpoints
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+      volumes:
+      - name: data
+        hostPath:
+          path: /tmp/ray-data
+          type: DirectoryOrCreate
+      - name: checkpoints
+        hostPath:
+          path: /tmp/ray-checkpoints
+          type: DirectoryOrCreate

@@ -1,0 +1,54 @@
+---
+# PersistentVolume for data
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ray-data-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /mnt/ray-data
+  persistentVolumeReclaimPolicy: Retain
+---
+# PersistentVolumeClaim for data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ray-data-pvc
+  namespace: ray-cluster
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+---
+# PersistentVolume for checkpoints
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ray-checkpoints-pv
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /mnt/ray-checkpoints
+  persistentVolumeReclaimPolicy: Retain
+---
+# PersistentVolumeClaim for checkpoints
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ray-checkpoints-pvc
+  namespace: ray-cluster
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
