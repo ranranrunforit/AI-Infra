@@ -316,9 +316,9 @@ kubectl get nodes
 # 3. Install GPU Device Plugin
 kubectl create -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.0/nvidia-device-plugin.yml
 # 4. Deploy Ray Cluster
-kubectl apply -f deployment-fixed.yaml
+kubectl apply -f kubernetes/deployment.yaml
 # 5. Submit Training Job
-kubectl apply -f training-job.yaml
+kubectl apply -f kubernetes/training-job.yaml
 kubectl logs -f -n ray-cluster job/resnet18-cifar10-training
 
 ```
