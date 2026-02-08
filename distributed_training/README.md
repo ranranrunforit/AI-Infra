@@ -267,6 +267,41 @@ kubectl get pods -n monitoring
 
 
 
+## Prerequisites
+
+# Install Tools with Winget
+# Install kubectl
+winget install Kubernetes.kubectl
+
+# Install Helm
+winget install Helm.Helm
+
+# Install minikube
+winget install Kubernetes.minikube
+
+# 1. Add NVIDIA Repo
+helm repo add nvidia https://helm.ngc.nvidia.com/nvidia
+helm repo update
+
+# 2. Install GPU Operator (For metrics)
+helm install --generate-name nvidia/gpu-operator
+
+# 3. Add Prometheus Repo
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# 4. Add Grafana Repo
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+
+# Check if kubectl is installed
+kubectl version --client
+
+# Check if you have a Kubernetes cluster
+kubectl cluster-info
+
+
+
 
 # Quick Setup (5 Steps):
 # 1. Enable Kubernetes with Kubeadm
