@@ -270,12 +270,11 @@ kubectl get pods -n monitoring
 
 # Quick Setup (5 Steps):
 # 1. Enable Kubernetes with Kubeadm
-Docker Desktop → Settings (gear icon) → Kubernetes tab
-✓ Enable Kubernetes
-Cluster Type: Kubeadm
-Version: v1.34.1 (default)
-Click "Apply & Restart"
-Wait 3-5 minutes for green "Kubernetes is running" indicator
+# Docker Desktop → Settings (gear icon) → Kubernetes tab ✓ Enable Kubernetes
+# Cluster Type: Kubeadm
+# Version: v1.34.1 (default)
+# Click "Apply & Restart"
+# Wait 3-5 minutes for green "Kubernetes is running" indicator
 # 2. Verify It's Working
 kubectl get nodes
 # Should show: docker-desktop   Ready   control-plane
