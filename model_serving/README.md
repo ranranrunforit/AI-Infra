@@ -1,7 +1,7 @@
 # Project 10: High-Performance Model Serving
 ## Overview
 
-This is the **complete reference implementation** for Project 202, demonstrating production-ready high-performance model serving with TensorRT optimization and vLLM integration.
+This is the production-ready high-performance model serving with TensorRT optimization and vLLM integration.
 
 ### Key Features
 
