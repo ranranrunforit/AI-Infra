@@ -302,7 +302,6 @@ kubectl cluster-info
 
 
 
-
 # Quick Setup (5 Steps):
 # 1. Enable Kubernetes with Kubeadm
 # Docker Desktop → Settings (gear icon) → Kubernetes tab ✓ Enable Kubernetes
