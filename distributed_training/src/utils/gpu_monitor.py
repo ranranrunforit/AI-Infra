@@ -10,7 +10,7 @@ class GPUMonitor:
             return {}
         
         return {
-            "gpu_memory_allocated_mb": torch.cuda.memory_allocated(self.device_id) / 1024 / 1024,
-            "gpu_memory_reserved_mb": torch.cuda.memory_reserved(self.device_id) / 1024 / 1024,
-            "gpu_memory_cached_mb": torch.cuda.memory_reserved(self.device_id) / 1024 / 1024,
+            "gpu_memory_allocated_mb": float(torch.cuda.memory_allocated(self.device_id) / 1024 / 1024),  # ✅ Converted to float
+            "gpu_memory_reserved_mb": float(torch.cuda.memory_reserved(self.device_id) / 1024 / 1024),    # ✅ Converted to float
+            "gpu_memory_cached_mb": float(torch.cuda.memory_reserved(self.device_id) / 1024 / 1024),      # ✅ Converted to float
         }

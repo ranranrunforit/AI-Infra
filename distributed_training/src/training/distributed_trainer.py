@@ -594,6 +594,10 @@ def main():
     parser.add_argument("--checkpoint-freq", type=int, default=1000)
     parser.add_argument("--resume-from", type=str, default=None)
     
+    # Add these missing arguments
+    parser.add_argument("--log-freq", type=int, default=10, help="Logging frequency in steps")
+    parser.add_argument("--eval-freq", type=int, default=500, help="Evaluation frequency in steps")
+
     # Ray config
     parser.add_argument("--ray-address", type=str, default=None,
                        help="Ray cluster address (None for local)")
@@ -604,15 +608,20 @@ def main():
     # When running in Docker, connect to the Ray head started by docker-compose
     # The Ray head is already running with dashboard enabled
     if args.ray_address:
+        address = args.ray_address
+            
+        logger.info(f"Connecting to Ray cluster via Client at: {address}")
         ray.init(
-            address=args.ray_address,
+            address=address,
             log_to_driver=True,  # Show worker logs in terminal
             logging_level=logging.INFO,
             runtime_env={
                     "env_vars": {
+                        "PYTHONPATH": "/app/src:/app:$PYTHONPATH",
                         "PYTHONUNBUFFERED": "1",
                         "RAY_LOG_TO_DRIVER": "1"
-                    }
+                    },
+                    "working_dir": "/app"
                 }
         )
     else:
@@ -627,9 +636,11 @@ def main():
                 logging_level=logging.INFO,
                 runtime_env={
                     "env_vars": {
+                        "PYTHONPATH": "/app/src:/app:$PYTHONPATH",
                         "PYTHONUNBUFFERED": "1",
                         "RAY_LOG_TO_DRIVER": "1"
-                    }
+                    },
+                    "working_dir": "/app"
                 }
             )
     
@@ -666,7 +677,9 @@ def main():
         checkpoint_dir=args.checkpoint_dir,
         checkpoint_freq=args.checkpoint_freq,
         resume_from=args.resume_from,
-        ray_address=args.ray_address
+        ray_address=args.ray_address,
+        log_freq=args.log_freq,    # Map the new log-freq
+        eval_freq=args.eval_freq  # Map the new eval-freq
     )
     
     logger.info("=" * 80)

@@ -29,7 +29,7 @@ spec:
           
           # Run training with explicit Ray address
           python -m src.training.distributed_trainer \
-            --ray-address ray-head:6379 \
+            --ray-address ray://ray-head:10001 \
             --model resnet18 \
             --dataset cifar10 \
             --epochs 10 \
@@ -44,6 +44,8 @@ spec:
           value: "1"
         - name: RAY_ADDRESS
           value: "ray-head:6379"
+        - name: PYTHONPATH
+          value: "/app/src:/app"
         volumeMounts:
         - name: data
           mountPath: /mnt/data
