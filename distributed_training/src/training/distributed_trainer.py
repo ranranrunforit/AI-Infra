@@ -30,7 +30,7 @@ from torch.cuda.amp import autocast, GradScaler
 import ray
 from ray import train
 from ray.train import Checkpoint, ScalingConfig, RunConfig, CheckpointConfig
-from ray.train.torch import TorchTrainer
+from ray.train.torch import TorchTrainer, TorchConfig
 
 # Local imports
 import sys
@@ -512,7 +512,7 @@ def train_func(config: Dict[str, Any]):
     trainer.setup(world_rank, world_size)
     
     # Create data loaders
-    train_loader = create_distributed_dataloader(
+    train_loader, _, _ = create_distributed_dataloader(
         dataset_name=training_config.dataset,
         data_path=training_config.data_path,
         batch_size=training_config.batch_size,
@@ -521,7 +521,7 @@ def train_func(config: Dict[str, Any]):
         prefetch_factor=training_config.prefetch_factor
     )
     
-    val_loader = create_distributed_dataloader(
+    val_loader, _, _ = create_distributed_dataloader(
         dataset_name=training_config.dataset,
         data_path=training_config.data_path,
         batch_size=training_config.batch_size,
@@ -602,6 +602,11 @@ def main():
     parser.add_argument("--ray-address", type=str, default=None,
                        help="Ray cluster address (None for local)")
     
+    # Backend config
+    parser.add_argument("--backend", type=str, default="nccl",
+                       choices=["nccl", "gloo"],
+                       help="Distributed backend (nccl for GPU, gloo for CPU/Windows)")
+
     args = parser.parse_args()
     
     # Initialize Ray
@@ -711,7 +716,8 @@ def main():
         train_func,
         train_loop_config=config.to_dict(),
         scaling_config=scaling_config,
-        run_config=run_config
+        run_config=run_config,
+        torch_config=TorchConfig(backend=args.backend)
     )
 
     import os
