@@ -303,7 +303,7 @@ Configured alerts:
 ### Project Structure
 
 ```
-project-101-basic-model-serving/
+project-06-basic-model-serving/
 ├── src/
 │   ├── __init__.py
 │   ├── api.py           # FastAPI application
