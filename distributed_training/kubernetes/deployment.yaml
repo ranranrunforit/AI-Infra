@@ -1,6 +1,14 @@
 ---
-# Fixed Kubernetes Deployment for Ray Distributed Training
-# Optimized for single GPU (RTX 5070) with proper dashboard and logging
+# Kubernetes Deployment for Ray Distributed Training
+# Optimized for single GPU (RTX 5070) on Docker Desktop + WSL2
+#
+# PREREQUISITE: Install nvidia-device-plugin first!
+#   kubectl apply -f kubernetes/nvidia-device-plugin.yaml
+#
+# Usage:
+#   kubectl apply -f kubernetes/deployment.yaml
+#   kubectl get pods -n ray-cluster
+#   kubectl logs -f deployment/ray-head -n ray-cluster
 
 apiVersion: v1
 kind: Namespace
@@ -19,13 +27,13 @@ metadata:
   name: ray-config
   namespace: ray-cluster
 data:
-  # NCCL optimization settings
   NCCL_DEBUG: "INFO"
   NCCL_SOCKET_IFNAME: "eth0"
-  # Ray settings
   RAY_BACKEND_LOG_LEVEL: "warning"
   PYTHONUNBUFFERED: "1"
+  PYTHONPATH: "/app/src:/app"
 ---
+# Ray Head Service — NodePort for dashboard and client access
 apiVersion: v1
 kind: Service
 metadata:
@@ -49,7 +57,13 @@ spec:
     port: 6379
     targetPort: 6379
     nodePort: 30379
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    nodePort: 30080
 ---
+# Ray Head Deployment — runs on the GPU
+# On a single-GPU laptop, the head node IS the worker
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -66,6 +80,9 @@ spec:
       labels:
         app: ray
         component: head
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
     spec:
       serviceAccountName: ray-serviceaccount
       containers:
@@ -76,13 +93,17 @@ spec:
         - /bin/bash
         - -c
         - |
+          echo "Starting Ray head node with GPU support..."
+          nvidia-smi || echo "WARNING: nvidia-smi failed"
+          python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" || true
+          
           ray start --head \
             --port=6379 \
             --ray-client-server-port=10001 \
             --dashboard-host=0.0.0.0 \
             --dashboard-port=8265 \
             --include-dashboard=true \
-            --num-cpus=4 \
+            --num-cpus=8 \
             --num-gpus=1 \
             --object-store-memory=2000000000 \
             --disable-usage-stats \
@@ -94,84 +115,19 @@ spec:
           name: dashboard
         - containerPort: 10001
           name: client
+        - containerPort: 8080
+          name: metrics
         envFrom:
         - configMapRef:
             name: ray-config
         env:
         - name: RAY_MEMORY_MONITOR_REFRESH_MS
           value: "0"
-        resources:
-          requests:
-            cpu: "2"
-            memory: "4Gi"
-          limits:
-            cpu: "4"
-            memory: "8Gi"
-        volumeMounts:
-        - name: shared-data
-          mountPath: /mnt/data
-        - name: checkpoints
-          mountPath: /mnt/checkpoints
-        - name: dshm
-          mountPath: /dev/shm
-      volumes:
-      - name: shared-data
-        emptyDir: {}
-      - name: checkpoints
-        emptyDir: {}
-      - name: dshm
-        emptyDir:
-          medium: Memory
-          sizeLimit: 2Gi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ray-worker
-  namespace: ray-cluster
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: ray
-      component: worker
-  template:
-    metadata:
-      labels:
-        app: ray
-        component: worker
-    spec:
-      serviceAccountName: ray-serviceaccount
-      containers:
-      - name: ray-worker
-        image: ray-training-laptop:latest
-        imagePullPolicy: IfNotPresent
-        command:
-        - /bin/bash
-        - -c
-        - |
-          until ray health-check --address=ray-head:6379 2>/dev/null; do
-            echo "Waiting for Ray head at ray-head:6379..."
-            sleep 2
-          done
-          echo "Ray head is ready, starting worker..."
-          ray start \
-            --address=ray-head:6379 \
-            --num-cpus=4 \
-            --num-gpus=1 \
-            --object-store-memory=4000000000 \
-            --block
-        envFrom:
-        - configMapRef:
-            name: ray-config
-        env:
         - name: NVIDIA_VISIBLE_DEVICES
           value: "all"
         - name: NVIDIA_DRIVER_CAPABILITIES
           value: "compute,utility"
         - name: CUDA_VISIBLE_DEVICES
-          value: "0"
-        - name: RAY_MEMORY_MONITOR_REFRESH_MS
           value: "0"
         - name: PYTORCH_CUDA_ALLOC_CONF
           value: "max_split_size_mb:512"
@@ -195,17 +151,14 @@ spec:
           mountPath: /dev/shm
       volumes:
       - name: shared-data
-        emptyDir: {}
+        hostPath:
+          path: /tmp/ray-data
+          type: DirectoryOrCreate
       - name: checkpoints
-        emptyDir: {}
+        hostPath:
+          path: /tmp/ray-checkpoints
+          type: DirectoryOrCreate
       - name: dshm
         emptyDir:
           medium: Memory
           sizeLimit: 4Gi
-      # volumes:
-      # - name: shared-data
-      #   persistentVolumeClaim:
-      #     claimName: ray-data-pvc
-      # - name: checkpoints
-      #   persistentVolumeClaim:
-      #     claimName: ray-checkpoints-pvc

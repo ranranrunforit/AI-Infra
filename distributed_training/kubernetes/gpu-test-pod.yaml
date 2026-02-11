@@ -1,0 +1,63 @@
+---
+# GPU Test Pod for Kubernetes
+# Use this to verify that your Kubernetes cluster can see and use GPUs
+#
+# Usage:
+#   kubectl apply -f kubernetes/gpu-test-pod.yaml
+#   kubectl logs gpu-test -n ray-cluster
+#   kubectl delete pod gpu-test -n ray-cluster
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-test
+  namespace: ray-cluster
+spec:
+  restartPolicy: Never
+  containers:
+  - name: gpu-test
+    image: ray-training-laptop:latest
+    imagePullPolicy: IfNotPresent
+    command:
+    - /bin/bash
+    - -c
+    - |
+      echo "=== GPU Test Pod ==="
+      echo ""
+      echo "--- nvidia-smi ---"
+      nvidia-smi || echo "ERROR: nvidia-smi not found"
+      echo ""
+      echo "--- CUDA in PyTorch ---"
+      python -c "
+      import torch
+      print(f'PyTorch version: {torch.__version__}')
+      print(f'CUDA available: {torch.cuda.is_available()}')
+      if torch.cuda.is_available():
+          print(f'CUDA version: {torch.version.cuda}')
+          print(f'GPU count: {torch.cuda.device_count()}')
+          for i in range(torch.cuda.device_count()):
+              props = torch.cuda.get_device_properties(i)
+              print(f'GPU {i}: {props.name}')
+              print(f'  Memory: {props.total_mem / 1024**3:.1f} GB')
+              print(f'  Compute: {props.major}.{props.minor}')
+          # Quick computation test
+          x = torch.randn(1000, 1000, device='cuda')
+          y = torch.matmul(x, x)
+          print(f'GPU computation test: PASSED (result shape: {y.shape})')
+      else:
+          print('WARNING: No GPU detected!')
+          print('Possible causes:')
+          print('  1. NVIDIA device plugin not installed')
+          print('  2. Docker Desktop GPU sharing not enabled')
+          print('  3. NVIDIA drivers not installed in WSL2')
+      "
+      echo ""
+      echo "--- NVIDIA Container Runtime ---"
+      cat /proc/driver/nvidia/version 2>/dev/null || echo "NVIDIA driver info not available in /proc"
+      echo ""
+      echo "=== Test Complete ==="
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+      requests:
+        nvidia.com/gpu: "1"

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-gpu-node
+  namespace: default
+spec:
+  containers:
+  - name: debugger
+    image: busybox
+    command: ["sleep", "3600"]
+    volumeMounts:
+    - name: dev
+      mountPath: /dev
+  volumes:
+  - name: dev
+    hostPath:
+      path: /dev

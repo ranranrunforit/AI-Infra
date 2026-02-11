@@ -1,65 +1,86 @@
+---
+# Kubernetes Job for running a training session
+# Connects to the Ray head and submits training work
+#
+# Usage:
+#   kubectl apply -f kubernetes/training-job.yaml
+#   kubectl logs -f jobs/training-job -n ray-cluster
+
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: resnet18-cifar10-training
+  name: training-job
   namespace: ray-cluster
 spec:
+  backoffLimit: 2
   template:
     metadata:
       labels:
-        app: ray-training-job
+        app: training
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
     spec:
-      restartPolicy: Never
+      serviceAccountName: ray-serviceaccount
+      restartPolicy: OnFailure
       containers:
-      - name: training
+      - name: trainer
         image: ray-training-laptop:latest
         imagePullPolicy: IfNotPresent
         command:
         - /bin/bash
         - -c
         - |
-          echo "Waiting for Ray cluster to be ready..."
-          until ray health-check --address=ray-head:6379 2>/dev/null; do
-            echo "Ray cluster not ready, waiting..."
-            sleep 2
-          done
-          echo "Ray cluster is ready!"
+          echo "=== Starting Training Job ==="
+          echo "Checking GPU availability..."
+          python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, GPUs: {torch.cuda.device_count()}')"
           
-          echo "Connecting to Ray at ray-head:6379"
-          
-          # Run training with explicit Ray address
+          echo "Connecting to Ray cluster..."
+          # Backend defaults to 'nccl' (GPU), use --backend gloo for CPU fallback or Windows issues
           python -m src.training.distributed_trainer \
-            --ray-address ray://ray-head:10001 \
             --model resnet18 \
             --dataset cifar10 \
             --epochs 10 \
-            --batch-size 256 \
+            --batch-size 128 \
+            --learning-rate 0.01 \
             --mixed-precision fp16 \
-            --num-workers 1 \
-            --gpus-per-worker 1
+            --data-path /mnt/data \
+            --checkpoint-dir /mnt/checkpoints \
+            --ray-address ray://ray-head:10001 \
+            --prometheus-port 8080 \
+            --backend nccl
           
-          echo "Training completed!"
+          echo "=== Training Complete ==="
+        ports:
+        - containerPort: 8080
+          name: metrics
         env:
-        - name: PYTHONUNBUFFERED
-          value: "1"
         - name: RAY_ADDRESS
-          value: "ray-head:6379"
+          value: "ray://ray-head:10001"
         - name: PYTHONPATH
           value: "/app/src:/app"
-        volumeMounts:
-        - name: data
-          mountPath: /mnt/data
-        - name: checkpoints
-          mountPath: /mnt/checkpoints
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
         resources:
           requests:
             cpu: "2"
             memory: "4Gi"
+            nvidia.com/gpu: "1"
           limits:
             cpu: "4"
             memory: "8Gi"
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - name: shared-data
+          mountPath: /mnt/data
+        - name: checkpoints
+          mountPath: /mnt/checkpoints
       volumes:
-      - name: data
+      - name: shared-data
         hostPath:
           path: /tmp/ray-data
           type: DirectoryOrCreate

@@ -1,0 +1,305 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "panels": [
+        {
+            "title": "Training Loss",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "training_loss",
+                    "legendFormat": "Loss",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2
+                    }
+                }
+            }
+        },
+        {
+            "title": "Training Accuracy",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "training_accuracy",
+                    "legendFormat": "Train Acc",
+                    "refId": "A"
+                },
+                {
+                    "expr": "training_val_accuracy",
+                    "legendFormat": "Val Acc",
+                    "refId": "B"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2
+                    },
+                    "unit": "percent"
+                }
+            }
+        },
+        {
+            "title": "GPU Memory Usage",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "gpu_memory_allocated_mb",
+                    "legendFormat": "Allocated MB",
+                    "refId": "A"
+                },
+                {
+                    "expr": "gpu_memory_reserved_mb",
+                    "legendFormat": "Reserved MB",
+                    "refId": "B"
+                },
+                {
+                    "expr": "gpu_memory_total_mb",
+                    "legendFormat": "Total MB",
+                    "refId": "C"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2
+                    },
+                    "unit": "decmbytes"
+                }
+            }
+        },
+        {
+            "title": "GPU Utilization & Temperature",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "gpu_utilization_pct",
+                    "legendFormat": "Utilization %",
+                    "refId": "A"
+                },
+                {
+                    "expr": "gpu_temperature_c",
+                    "legendFormat": "Temp °C",
+                    "refId": "B"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2
+                    }
+                }
+            }
+        },
+        {
+            "title": "Training Throughput",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "expr": "training_throughput",
+                    "legendFormat": "Samples/sec",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2
+                    },
+                    "unit": "ops"
+                }
+            }
+        },
+        {
+            "title": "Learning Rate",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "expr": "training_learning_rate",
+                    "legendFormat": "LR",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2
+                    }
+                }
+            }
+        },
+        {
+            "title": "GPU Power Draw",
+            "type": "gauge",
+            "gridPos": {
+                "h": 8,
+                "w": 6,
+                "x": 0,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "gpu_power_draw_w",
+                    "legendFormat": "Power (W)",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "watt",
+                    "min": 0,
+                    "max": 250,
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 150
+                            },
+                            {
+                                "color": "red",
+                                "value": 200
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "title": "Current Epoch",
+            "type": "stat",
+            "gridPos": {
+                "h": 8,
+                "w": 6,
+                "x": 6,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "training_epoch",
+                    "legendFormat": "Epoch",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "Best Accuracy",
+            "type": "stat",
+            "gridPos": {
+                "h": 8,
+                "w": 6,
+                "x": 12,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "training_best_accuracy",
+                    "legendFormat": "Best Acc",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percent"
+                }
+            }
+        },
+        {
+            "title": "Checkpoints Saved",
+            "type": "stat",
+            "gridPos": {
+                "h": 8,
+                "w": 6,
+                "x": 18,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "training_checkpoints_saved_total",
+                    "legendFormat": "Total",
+                    "refId": "A"
+                }
+            ]
+        }
+    ],
+    "schemaVersion": 38,
+    "style": "dark",
+    "tags": [
+        "training",
+        "gpu",
+        "ray"
+    ],
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "title": "Distributed Training Dashboard",
+    "uid": "distributed-training",
+    "version": 1
+}

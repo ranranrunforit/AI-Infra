@@ -1,0 +1,415 @@
+---
+# Prometheus + Grafana Monitoring Stack for Kubernetes
+# Monitors Ray cluster, GPU metrics, and training progress
+#
+# Usage:
+#   kubectl apply -f kubernetes/monitoring.yaml
+#   Prometheus UI: http://localhost:30090
+#   Grafana UI:    http://localhost:30030 (admin/admin)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+---
+# ─────────────────────────────────────────────────────────────
+# Prometheus Configuration
+# ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      # Prometheus self-monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Ray head training metrics (Prometheus exporter on port 8080)
+      - job_name: 'ray-training'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ['ray-cluster']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}
+          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+);(.+)
+            replacement: $1:$2
+
+      # Ray head direct scrape (fallback)
+      - job_name: 'ray-head-direct'
+        static_configs:
+          - targets: ['ray-head.ray-cluster.svc.cluster.local:8080']
+        metrics_path: /metrics
+
+      # Ray Dashboard metrics
+      - job_name: 'ray-dashboard'
+        static_configs:
+          - targets: ['ray-head.ray-cluster.svc.cluster.local:8265']
+        metrics_path: /metrics
+        scrape_interval: 30s
+
+      # DCGM GPU metrics (if nvidia-dcgm-exporter is installed)
+      - job_name: 'gpu-dcgm'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: nvidia-dcgm-exporter
+---
+# Prometheus RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "pods", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+---
+# Prometheus Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.51.0
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--storage.tsdb.path=/prometheus"
+        - "--storage.tsdb.retention.time=7d"
+        - "--web.enable-lifecycle"
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: data
+          mountPath: /prometheus
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: data
+        emptyDir: {}
+---
+# Prometheus Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  type: NodePort
+  selector:
+    app: prometheus
+  ports:
+  - port: 9090
+    targetPort: 9090
+    nodePort: 30090
+---
+# ─────────────────────────────────────────────────────────────
+# Grafana
+# ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.monitoring.svc.cluster.local:9090
+        isDefault: true
+        editable: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-training
+  namespace: monitoring
+data:
+  training-dashboard.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "title": "Training Loss",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            { "expr": "training_loss", "legendFormat": "Loss", "refId": "A" }
+          ],
+          "fieldConfig": {
+            "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 } }
+          }
+        },
+        {
+          "title": "Training Accuracy",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            { "expr": "training_accuracy", "legendFormat": "Train Acc", "refId": "A" },
+            { "expr": "training_val_accuracy", "legendFormat": "Val Acc", "refId": "B" }
+          ],
+          "fieldConfig": {
+            "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "percent" }
+          }
+        },
+        {
+          "title": "GPU Memory Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            { "expr": "gpu_memory_allocated_mb", "legendFormat": "Allocated MB", "refId": "A" },
+            { "expr": "gpu_memory_reserved_mb", "legendFormat": "Reserved MB", "refId": "B" },
+            { "expr": "gpu_memory_total_mb", "legendFormat": "Total MB", "refId": "C" }
+          ],
+          "fieldConfig": {
+            "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "decmbytes" }
+          }
+        },
+        {
+          "title": "GPU Utilization & Temperature",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            { "expr": "gpu_utilization_pct", "legendFormat": "Utilization %", "refId": "A" },
+            { "expr": "gpu_temperature_c", "legendFormat": "Temp °C", "refId": "B" }
+          ],
+          "fieldConfig": {
+            "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 } }
+          }
+        },
+        {
+          "title": "Training Throughput",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "targets": [
+            { "expr": "training_throughput", "legendFormat": "Samples/sec", "refId": "A" }
+          ],
+          "fieldConfig": {
+            "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "ops" }
+          }
+        },
+        {
+          "title": "Learning Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "targets": [
+            { "expr": "training_learning_rate", "legendFormat": "LR", "refId": "A" }
+          ],
+          "fieldConfig": {
+            "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 } }
+          }
+        },
+        {
+          "title": "GPU Power Draw",
+          "type": "gauge",
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 24 },
+          "targets": [
+            { "expr": "gpu_power_draw_w", "legendFormat": "Power (W)", "refId": "A" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "watt", "min": 0, "max": 250, "thresholds": { "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 150 },
+              { "color": "red", "value": 200 }
+            ]}}
+          }
+        },
+        {
+          "title": "Current Epoch",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 6, "x": 6, "y": 24 },
+          "targets": [
+            { "expr": "training_epoch", "legendFormat": "Epoch", "refId": "A" }
+          ]
+        },
+        {
+          "title": "Best Accuracy",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 24 },
+          "targets": [
+            { "expr": "training_best_accuracy", "legendFormat": "Best Acc", "refId": "A" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "percent" } }
+        },
+        {
+          "title": "Checkpoints Saved",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 24 },
+          "targets": [
+            { "expr": "training_checkpoints_saved_total", "legendFormat": "Total", "refId": "A" }
+          ]
+        }
+      ],
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["training", "gpu", "ray"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Distributed Training Dashboard",
+      "uid": "distributed-training",
+      "version": 1
+    }
+---
+# Grafana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.4.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+          value: "/var/lib/grafana/dashboards/training-dashboard.json"
+        volumeMounts:
+        - name: datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: dashboards-provider
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: dashboards
+          mountPath: /var/lib/grafana/dashboards
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+      volumes:
+      - name: datasources
+        configMap:
+          name: grafana-datasources
+      - name: dashboards-provider
+        configMap:
+          name: grafana-dashboards-provider
+      - name: dashboards
+        configMap:
+          name: grafana-dashboard-training
+---
+# Grafana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  type: NodePort
+  selector:
+    app: grafana
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30030
