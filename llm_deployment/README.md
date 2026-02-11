@@ -718,7 +718,7 @@ mypy src/
 ### Project Structure
 
 ```
-llm-deployment/
+project-08-llm-deployment/
 ├── src/
 │   ├── api/              # FastAPI application
 │   ├── llm/              # LLM serving logic
