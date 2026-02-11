@@ -1,45 +1,25 @@
-# Core ML frameworks
-torch==2.1.2
-torchvision==0.16.2
-torchaudio==2.1.2
-
-# Ray for distributed training
-ray[default,train]==2.9.0
+# Ray for distributed training (Unpinned to support Nightly PyTorch)
+ray[default,train]
 
 # Data processing
-numpy==1.24.3
-pandas==2.0.3
-pillow==10.0.0
-
-# MLOps
-mlflow==2.10.0
-tensorboard==2.15.1
+numpy
+pandas
+pillow
 
 # Monitoring
-prometheus-client==0.19.0
-psutil==5.9.6
+prometheus-client
+psutil
+nvidia-ml-py3
+tensorboard
 
 # Configuration
-pyyaml==6.0.1
-python-dotenv==1.0.0
+pyyaml
+python-dotenv
 
 # Testing
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
+pytest
+pytest-asyncio
 
 # Utilities
-tqdm==4.66.1
-colorlog==6.8.0
-wandb==0.16.2
-
-# Kubernetes
-kubernetes==28.1.0
-
-# Performance profiling
-py-spy==0.3.14
-memory-profiler==0.61.0
-
-# NVIDIA tools (installed separately)
-# nvidia-ml-py3==7.352.0
-# pycuda==2022.2.2
+tqdm
+colorlog

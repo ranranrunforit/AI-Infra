@@ -1,66 +1,88 @@
-version: '3.8'
+---
+# Docker Compose for Local Development
+# Starts Ray cluster with GPU support and monitoring
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f ray-head
+#
+# Access:
+#   Ray Dashboard: http://localhost:8265
+#   Prometheus:    http://localhost:9090
+#   Grafana:       http://localhost:3000 (admin/admin)
 
 services:
+  # ─── Ray Head Node (with GPU) ──────────────────────────
   ray-head:
-    build: .
-    image: ray-training-laptop:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: ray-head
-    shm_size: '4gb'
-    tty: true
-    stdin_open: true
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=0
-      - RAY_MEMORY_MONITOR_REFRESH_MS=0
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - CUDA_VISIBLE_DEVICES=0
-      - OMP_NUM_THREADS=4
+      - RAY_MEMORY_MONITOR_REFRESH_MS=0
+      - PYTHONPATH=/app/src:/app
       - PYTHONUNBUFFERED=1
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-      - PYTHONPATH=/app/src
-      # Ray logging
-      - RAY_LOG_TO_STDERR=1
-      - RAY_BACKEND_LOG_LEVEL=warning
-    # FIXED: Use bash to start Ray with dashboard properly
-    command: >
-      bash -c "
-      echo 'Starting Ray head node with dashboard...';
-      ray start --head
-      --port=6379
-      --dashboard-host=0.0.0.0
-      --dashboard-port=8265
-      --num-cpus=8
-      --num-gpus=1
-      --object-store-memory=2000000000
-      --include-dashboard=true
-      --disable-usage-stats
-      --block
-      "
     ports:
-      - "6379:6379"      # Ray GCS
-      - "8265:8265"      # Ray Dashboard - MAIN FIX
-      - "10001:10001"    # Ray Client
-      - "8080:8080"      # Prometheus
+      - "8265:8265"   # Ray dashboard
+      - "10001:10001" # Ray client
+      - "6379:6379"   # Ray GCS
+      - "8080:8080"   # Prometheus metrics
     volumes:
       - ./data:/mnt/data
       - ./checkpoints:/mnt/checkpoints
       - ./src:/app/src
-      - ./logs:/app/logs
-    networks:
-      - ray-network
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']
+              count: 1
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8265"]
+      test: ["CMD", "ray", "status"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+    restart: unless-stopped
 
-networks:
-  ray-network:
-    driver: bridge
+  # ─── Prometheus ────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    restart: unless-stopped
+    depends_on:
+      - ray-head
+
+  # ─── Grafana ───────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/training-dashboard.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:
