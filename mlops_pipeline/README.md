@@ -117,7 +117,7 @@ docker-compose exec airflow-webserver airflow dags trigger deployment_pipeline
 ## Project Structure
 
 ```
-project-102-mlops-pipeline/
+project-07-mlops-pipeline/
 ├── dags/                           # Airflow DAG definitions
 │   ├── data_pipeline.py           # Data ingestion & preprocessing
 │   ├── training_pipeline.py       # Model training & registration
