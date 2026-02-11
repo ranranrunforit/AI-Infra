@@ -101,7 +101,7 @@ curl http://$SERVICE_URL/health
 ## Project Structure
 
 ```
-model-serving/
+project-10-model-serving/
 ├── src/
 │   ├── tensorrt/          # TensorRT conversion and optimization
 │   │   ├── __init__.py
