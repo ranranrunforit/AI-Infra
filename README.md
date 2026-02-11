@@ -35,7 +35,7 @@ vLLM, RAG, Pinecone Vector DB, Kubernetes, Prometheus, Grafana, Docker
 
 **[Distributed Training Platform](./distributed_training)**
 
-Ray, NCCL, Prometheus, Grafana, DCGM, Kubernetes, Docker
+Ray, Prometheus, Grafana, NCCL, DCGM, Kubernetes, Docker
 
 **[High-Performance Model Serving with TensorRT-LLM](./model_serving)**
 
