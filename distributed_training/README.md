@@ -724,7 +724,7 @@ For more troubleshooting, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 ## Project Structure
 
 ```
-distributed-training/
+project-09-distributed-training/
 ├── src/
 │   ├── training/
 │   │   ├── distributed_trainer.py    # Main training loop with Ray
