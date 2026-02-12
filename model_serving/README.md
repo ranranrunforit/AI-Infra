@@ -79,6 +79,12 @@ curl -X POST http://localhost:8000/predict \
     -d '{"model": "resnet50", "input": {"image_url": "https://example.com/cat.jpg"}}'
 ```
 
+### Docker Deployment
+
+```bash
+
+```
+
 ### Kubernetes Deployment
 
 ```bash
