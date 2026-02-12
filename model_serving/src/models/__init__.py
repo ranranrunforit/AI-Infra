@@ -250,7 +250,7 @@ class InferenceResponse:
             "request_id": self.request_id,
             "tokens_generated": self.tokens_generated,
             "finish_reason": self.finish_reason,
-            "latency": latency,
+            "latency": self.latency,
             "tokens_per_second": self.tokens_per_second,
             "timestamp": self.timestamp,
             "metadata": self.metadata,

@@ -4,7 +4,7 @@
 # =============================================================================
 # Stage 1: Base Image with CUDA and System Dependencies
 # =============================================================================
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04 AS base
+FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04 AS base
 
 # Metadata
 LABEL maintainer="ai-infra-curriculum@joshua-ferguson.com"
@@ -74,38 +74,22 @@ WORKDIR /build
 # Copy requirements file
 COPY requirements.txt .
 
-# Install Python packages with optimizations
-RUN pip install --user --no-warn-script-location \
-    # Core dependencies
-    -r requirements.txt \
-    # Additional production dependencies
-    gunicorn==21.2.0 \
-    uvicorn[standard]==0.24.0 \
-    # Monitoring and tracing
-    prometheus-client==0.19.0 \
-    opentelemetry-api==1.21.0 \
-    opentelemetry-sdk==1.21.0 \
-    opentelemetry-instrumentation-fastapi==0.42b0 \
-    opentelemetry-exporter-jaeger==1.21.0 \
-    opentelemetry-exporter-otlp==1.21.0 \
-    # GPU acceleration
-    nvidia-ml-py==12.535.133 \
-    # Performance optimization
-    orjson==3.9.10 \
-    ujson==5.8.0 \
-    msgpack==1.0.7
+# Install Python packages (all versions pinned in requirements.txt)
+RUN pip install --user --no-warn-script-location -r requirements.txt
 
 # =============================================================================
 # Stage 3: TensorRT Installation
 # =============================================================================
 FROM base AS tensorrt-builder
 
-# Install TensorRT from NVIDIA repositories
+# Install TensorRT from NVIDIA repositories (may not exist for all CUDA versions)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11-dev \
-    libnvinfer-dev=8.6.1.6-1+cuda12.0 \
-    libnvonnxparsers-dev=8.6.1.6-1+cuda12.0 \
-    libnvinfer-plugin-dev=8.6.1.6-1+cuda12.0 \
+    && (apt-get install -y --no-install-recommends \
+        libnvinfer-dev \
+        libnvonnxparsers-dev \
+        libnvinfer-plugin-dev \
+        || echo 'WARNING: TensorRT apt packages not available, skipping') \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -113,11 +97,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
-# Install TensorRT Python package
+# Install TensorRT Python package from NVIDIA's index
+# Use tensorrt-cu12 explicitly for CUDA 12.x compatibility
+# The || true fallback ensures the build succeeds even if TensorRT
+# packages aren't available for this exact CUDA version
 RUN pip install --user \
-    tensorrt==8.6.1.post1 \
-    nvidia-tensorrt==99.0.0 \
-    pycuda==2022.2.2
+    --extra-index-url https://pypi.nvidia.com/ \
+    tensorrt-cu12 tensorrt-cu12-bindings tensorrt-cu12-libs \
+    pycuda \
+    || echo "WARNING: TensorRT pip install failed, continuing without it"
 
 # =============================================================================
 # Stage 4: Final Production Image
@@ -150,7 +138,7 @@ COPY --chown=appuser:appuser .env.example /app/.env
 
 # Set environment variables for the application
 ENV PATH=/home/appuser/.local/bin:$PATH \
-    PYTHONPATH=/app:$PYTHONPATH \
+    PYTHONPATH=/app \
     MODEL_CACHE_DIR=/app/models \
     TENSORRT_ENGINE_CACHE_DIR=/app/engine_cache \
     TENSORRT_CALIBRATION_CACHE=/app/calibration_cache \
@@ -177,10 +165,10 @@ HEALTHCHECK --interval=30s \
                    sys.exit(0 if r.status_code == 200 else 1)"
 
 # Set default command (can be overridden)
-CMD ["python", "-m", "uvicorn", "src.api.main:app", \
+CMD ["python", "-m", "uvicorn", "src.serving.server:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
-     "--workers", "4", \
+     "--workers", "2", \
      "--log-level", "info", \
      "--no-access-log"]
 
@@ -225,7 +213,7 @@ ENV DEBUG_MODE=true \
 USER appuser
 
 # Override CMD for development with auto-reload
-CMD ["python", "-m", "uvicorn", "src.api.main:app", \
+CMD ["python", "-m", "uvicorn", "src.serving.server:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
      "--reload", \

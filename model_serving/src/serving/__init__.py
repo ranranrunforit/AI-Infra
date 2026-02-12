@@ -28,6 +28,8 @@ from .batch_processor import (
     BatchStats,
 )
 
+from .warmup import ModelWarmup
+
 # Server components are imported separately to avoid FastAPI dependency issues
 # from .server import app, PredictRequest, PredictResponse
 
@@ -42,6 +44,8 @@ __all__ = [
     "BatchRequest",
     "RequestPriority",
     "BatchStats",
+    # Warmup
+    "ModelWarmup",
 ]
 
 __version__ = "1.0.0"

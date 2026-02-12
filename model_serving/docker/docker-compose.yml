@@ -34,7 +34,7 @@ services:
       # Server
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8000
-      - SERVER_WORKERS=4
+      - SERVER_WORKERS=2
       - SERVER_LOG_LEVEL=info
 
       # Model configuration
@@ -44,7 +44,7 @@ services:
       - MAX_MODELS_LOADED=5
 
       # TensorRT
-      - TENSORRT_WORKSPACE_SIZE=4294967296
+      - TENSORRT_WORKSPACE_SIZE=2147483648  # 2GB for RTX 5070 (12GB VRAM)
       - TENSORRT_MAX_BATCH_SIZE=32
       - TENSORRT_ENGINE_CACHE_DIR=/app/engine_cache
       - TENSORRT_FP16_ENABLED=true
@@ -53,7 +53,7 @@ services:
       - VLLM_TENSOR_PARALLEL_SIZE=1
       - VLLM_MAX_NUM_BATCHED_TOKENS=16384
       - VLLM_MAX_NUM_SEQS=256
-      - VLLM_GPU_MEMORY_UTILIZATION=0.90
+      - VLLM_GPU_MEMORY_UTILIZATION=0.85  # RTX 5070: 12GB VRAM
 
       # Serving
       - BATCH_SIZE_MAX=32
@@ -91,7 +91,7 @@ services:
 
       # GPU
       - CUDA_VISIBLE_DEVICES=0
-      - GPU_MEMORY_FRACTION=0.90
+      - GPU_MEMORY_FRACTION=0.85  # RTX 5070: 12GB VRAM, leave headroom
 
       # Health checks
       - HEALTH_CHECK_INTERVAL_SECONDS=30
@@ -104,7 +104,7 @@ services:
 
       # Performance
       - PRELOAD_MODELS=resnet50-fp16,bert-base-fp16
-      - ASYNC_WORKERS=4
+      - ASYNC_WORKERS=2
       - GRACEFUL_SHUTDOWN_TIMEOUT=30
 
     # Port mappings

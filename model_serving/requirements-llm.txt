@@ -1,0 +1,8 @@
+# LLM Serving Dependencies (optional)
+# Install with: pip install -r requirements-llm.txt
+# NOTE: vllm requires a specific CUDA toolkit version and matching torch.
+# Install inside a container with the correct CUDA version.
+-r requirements.txt
+
+vllm==0.4.1
+ray[default]==2.9.3

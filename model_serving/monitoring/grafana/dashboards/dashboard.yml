@@ -1,0 +1,17 @@
+# Grafana Dashboard Provisioning
+# Auto-loads dashboards from the dashboards directory
+
+apiVersion: 1
+
+providers:
+  - name: "Model Serving Dashboards"
+    orgId: 1
+    folder: "Model Serving"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

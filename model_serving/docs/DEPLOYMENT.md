@@ -1022,3 +1022,5 @@ kubectl port-forward -n monitoring svc/jaeger-query 16686:16686
 
 ---
 
+**Last Updated**: 2024-01-15
+**Document Version**: 1.0

@@ -1,0 +1,64 @@
+# Prometheus Alerting Rules for Model Serving
+
+groups:
+  - name: model_serving_alerts
+    rules:
+      # High request latency
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.99, rate(model_serving_request_duration_seconds_bucket[5m])) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P99 latency on model serving"
+          description: "P99 latency is {{ $value }}s (threshold: 1s) for {{ $labels.model }}"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(model_serving_requests_total{status="error"}[5m]) / rate(model_serving_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on model serving"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Service down
+      - alert: ModelServingDown
+        expr: up{job="model-serving"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model serving is down"
+          description: "Model serving has been unreachable for more than 1 minute"
+
+      # High GPU utilization
+      - alert: HighGPUUtilization
+        expr: model_serving_gpu_utilization > 95
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU utilization is very high"
+          description: "GPU utilization has been above 95% for 10 minutes"
+
+      # No requests (possible issue)
+      - alert: NoRequests
+        expr: rate(model_serving_requests_total[10m]) == 0
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "No requests received"
+          description: "Model serving has not received any requests for 15 minutes"
+
+      # Large batch queue
+      - alert: LargeBatchQueue
+        expr: model_serving_batch_queue_size > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Batch queue is growing"
+          description: "Batch queue size is {{ $value }} (threshold: 500)"

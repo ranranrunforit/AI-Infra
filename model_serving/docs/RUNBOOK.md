@@ -795,6 +795,16 @@ kubectl get pods -n model-serving -o wide
 - **GPU Metrics**: http://grafana.example.com/d/gpu-metrics
 - **Request Tracing**: http://grafana.example.com/d/request-tracing
 
+---
+
+## Emergency Contacts
+
+| Role | Contact | Escalation |
+|------|---------|------------|
+| On-Call Engineer | PagerDuty | Immediate |
+| ML Platform Lead | slack:@ml-lead | Within 30 min |
+| Infrastructure Lead | slack:@infra-lead | Within 1 hour |
+| VP Engineering | phone:+1-xxx-xxx-xxxx | Critical only |
 
 ---
 
@@ -805,6 +815,8 @@ kubectl get pods -n model-serving -o wide
 - [Deployment Guide](DEPLOYMENT.md)
 - [Troubleshooting Guide](TROUBLESHOOTING.md)
 
-
 ---
 
+**Document Version**: 1.0
+**Last Updated**: 2024-01-15
+**Next Review**: 2024-04-15

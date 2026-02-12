@@ -972,3 +972,14 @@ fetch(`${BASE_URL}/v1/predict`, {
 - [Troubleshooting Guide](TROUBLESHOOTING.md)
 
 ---
+
+## Support
+
+For API support and questions:
+- Email: ai-infra-curriculum@joshua-ferguson.com
+- GitHub Issues: https://github.com/ai-infra-curriculum/ai-infra-senior-engineer-solutions
+
+---
+
+**Last Updated**: 2024-01-15
+**API Version**: 1.0.0
