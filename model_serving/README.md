@@ -177,6 +177,23 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:8000/v1/predict" \
   -ContentType "application/json" \
   -Body '{"model": "resnet18", "inputs": {"image": "https://example.com/cat.jpg"}}'
 
+
+## Converting Models
+# Use the conversion script to create TensorRT engines:
+# Inside the container
+docker exec -it model-serving python scripts/convert_model.py \
+    --model resnet50 \
+    --precision fp16 \
+    --batch-size 8 \
+    --output /app/models/resnet50-fp16.trt
+
+# INT8 calibration (also works on single GPU)
+docker exec -it model-serving python scripts/convert_model.py \
+    --model resnet50 \
+    --precision int8 \
+    --calibration-samples 200 \
+    --output /app/models/resnet50-int8.trt
+
 # Stop
  docker stop model-serving
 
