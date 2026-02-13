@@ -365,7 +365,16 @@ kubectl port-forward svc/grafana 3000:3000
 # === Deleting Resources ===
 kubectl delete -k kubernetes/observability/ --ignore-not-found
 kubectl delete -k kubernetes/base/ --ignore-not-found
+minikube stop
 
+
+
+# 1. Update the cluster
+kubectl apply -k kubernetes/observability/
+# 2. Restart Grafana to pick up changes
+kubectl rollout restart deployment/grafana
+# 3. Wait for it to restart
+kubectl rollout status deployment/grafana
 ```
 
 ## Project Structure
