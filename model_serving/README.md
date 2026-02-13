@@ -82,7 +82,7 @@ curl -X POST http://localhost:8000/predict \
 ### Docker Deployment
 
 ```bash
-## Option 1: Docker Compose
+## Option 1: Docker Compose (Recommended)
 
 ### Step 1: Build the Docker Image
 
@@ -147,6 +147,54 @@ docker compose -f docker/docker-compose.yml down -v
 docker compose -f docker/docker-compose.yml down
 docker compose -f docker/docker-compose.yml up --build -d
 
+
+
+## Option 2: Single Docker Container (Lightweight)
+
+# If you only need the API without monitoring:
+
+# Build
+docker build -t model-serving:latest -f docker/Dockerfile .
+
+# Run with GPU
+docker run --rm -d \
+    --name model-serving \
+    --gpus all \
+    -p 8000:8000 \
+    -p 9090:9090 \
+    -v model-cache:/app/models \
+    -e CUDA_VISIBLE_DEVICES=0 \
+    -e GPU_MEMORY_FRACTION=0.85 \
+    model-serving:latest
+
+# Download model & Test
+
+docker exec -it -e TORCH_HOME=/tmp/torch_cache -e XDG_CACHE_HOME=/tmp model-serving python /app/scripts/download_resnet18.py
+
+curl.exe http://localhost:8000/health
+
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/v1/predict" \
+  -ContentType "application/json" \
+  -Body '{"model": "resnet18", "inputs": {"image": "https://example.com/cat.jpg"}}'
+
+# Stop
+ docker stop model-serving
+
+
+# To clean up everything else:
+
+# Stop container (auto-removes due to --rm)
+docker stop model-serving
+# Remove the model-cache volume (where downloaded models are stored)
+docker volume rm model-cache
+# Remove the Docker image
+docker rmi model-serving:latest
+# (Optional) Remove all docker-compose volumes too
+docker compose -f docker/docker-compose.yml down -v
+# That removes the container, the model files, and the image. To verify nothing's left:
+docker ps -a --filter name=model-serving
+docker volume ls --filter name=model-cache
+docker images model-serving
 ```
 
 ### Kubernetes Deployment
