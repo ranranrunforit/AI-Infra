@@ -39,4 +39,4 @@ Ray, Prometheus, Grafana, NCCL, DCGM, Kubernetes, Docker
 
 **[High-Performance Model Serving with TensorRT-LLM](./model_serving)**
 
-FastAPI, TensorRT, vLLM, Prometheus, Jaeger, Grafana
+FastAPI, TensorRT, vLLM, Redis，Postgres，Prometheus, Jaeger, Grafana
