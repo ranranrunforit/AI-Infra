@@ -348,10 +348,10 @@ kubectl wait --for=condition=Ready pod -l app=grafana --timeout=300s
 # =============================================================================
 
 # Forward ports in background
-kubectl port-forward svc/model-serving 8000:8000 &
-kubectl port-forward svc/jaeger 16686:16686 &
-kubectl port-forward svc/prometheus 9090:9090 &
-kubectl port-forward svc/grafana 3000:3000 &
+kubectl port-forward svc/model-serving 8000:8000
+kubectl port-forward svc/jaeger 16686:16686
+kubectl port-forward svc/prometheus 9090:9090
+kubectl port-forward svc/grafana 3000:3000
 
 # =============================================================================
 # Teardown Kubernetes Deployment
