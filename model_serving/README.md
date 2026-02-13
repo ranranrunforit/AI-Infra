@@ -82,6 +82,70 @@ curl -X POST http://localhost:8000/predict \
 ### Docker Deployment
 
 ```bash
+## Option 1: Docker Compose
+
+### Step 1: Build the Docker Image
+
+docker build -t model-serving:latest -f docker/Dockerfile .
+
+# First build takes 10-15 minutes. Subsequent builds use cache.
+
+### Step 2: Start the Stack
+
+docker compose -f docker/docker-compose.yml up -d
+
+### Step 3: Verify All Services
+
+docker compose -f docker/docker-compose.yml ps
+
+# Expected output — all services should show `Up` or `healthy`:
+
+| Service | Port | URL |
+|---------|------|-----|
+| Model Serving API | 8000 | http://localhost:8000 |
+| Prometheus | 9091 | http://localhost:9091 |
+| Grafana | 3000 | http://localhost:3000 (admin/admin) |
+| Jaeger UI | 16686 | http://localhost:16686 |
+| Redis | 6379 | — |
+| PostgreSQL | 5432 | — |
+
+curl.exe http://127.0.0.1:8000/health
+curl.exe http://127.0.0.1:8000/metrics
+# Or
+Invoke-RestMethod -Uri "http://localhost:8000/health"
+
+### Then download the model and test:
+docker exec -it model-serving python /app/scripts/download_resnet18.py
+# Or
+docker exec -it -e TORCH_HOME=/tmp/torch_cache -e XDG_CACHE_HOME=/tmp model-serving python /app/scripts/download_resnet18.py
+
+### Step 4: Test the API
+
+# Health check
+curl.exe http://127.0.0.1:8000/health
+curl.exe http://127.0.0.1:8000/metrics
+# Or
+Invoke-RestMethod -Uri "http://localhost:8000/health"
+
+# Predict (once models are loaded)
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/v1/predict" -ContentType "application/json" -Body '{"model": "resnet18", "inputs": {"image": "https://example.com/cat.jpg"}}'
+
+### Step 5: View Monitoring
+
+# 1. Open **Grafana** at http://localhost:3000 (login: admin / admin)
+# 2. Navigate to **Dashboards → Model Serving** folder → **Model Serving Overview**
+# 3. Open **Jaeger** at http://localhost:16686 for distributed traces
+
+### Step 6: Stop the Stack
+
+docker compose -f docker/docker-compose.yml down
+# To also remove data volumes:
+docker compose -f docker/docker-compose.yml down -v
+
+
+## Debug: Rebuild the image and Test
+docker compose -f docker/docker-compose.yml down
+docker compose -f docker/docker-compose.yml up --build -d
 
 ```
 
