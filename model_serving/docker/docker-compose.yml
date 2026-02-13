@@ -109,8 +109,7 @@ services:
 
     # Port mappings
     ports:
-      - "8000:8000"  # API server
-      - "9090:9090"  # Prometheus metrics
+      - "8000:8000"  # API server + Prometheus metrics
 
     # Volume mounts
     volumes:
@@ -323,10 +322,8 @@ services:
     environment:
       - COLLECTOR_ZIPKIN_HOST_PORT=:9411
       - COLLECTOR_OTLP_ENABLED=true
-      - SPAN_STORAGE_TYPE=badger
-      - BADGER_EPHEMERAL=false
-      - BADGER_DIRECTORY_VALUE=/badger/data
-      - BADGER_DIRECTORY_KEY=/badger/key
+      # Use in-memory storage to avoid /badger permission issues on WSL2
+      - SPAN_STORAGE_TYPE=memory
 
     ports:
       - "5775:5775/udp"  # Zipkin compact thrift
@@ -339,9 +336,6 @@ services:
       - "9411:9411"      # Zipkin
       - "4317:4317"      # OTLP gRPC
       - "4318:4318"      # OTLP HTTP
-
-    volumes:
-      - jaeger-data:/badger
 
     networks:
       - model-serving-net
@@ -398,8 +392,4 @@ volumes:
 
   # Grafana data
   grafana-data:
-    driver: local
-
-  # Jaeger data
-  jaeger-data:
     driver: local

@@ -15,7 +15,7 @@ scrape_configs:
   # Model Serving API metrics
   - job_name: "model-serving"
     static_configs:
-      - targets: ["model-serving:9090"]
+      - targets: ["model-serving:8000"]
         labels:
           service: "model-serving"
           environment: "local"

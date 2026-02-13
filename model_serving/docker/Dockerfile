@@ -161,7 +161,7 @@ HEALTHCHECK --interval=30s \
     --start-period=5m \
     --retries=3 \
     CMD python -c "import requests; import sys; \
-                   r = requests.get('http://localhost:8000/health/live', timeout=5); \
+                   r = requests.get('http://localhost:8000/health', timeout=5); \
                    sys.exit(0 if r.status_code == 200 else 1)"
 
 # Set default command (can be overridden)

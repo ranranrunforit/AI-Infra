@@ -27,11 +27,26 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 import torch
 import torch.nn as nn
-import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit
+
+# TensorRT and PyCUDA are optional — they may not be installed
+# The app still works with PyTorch and ONNX models without them
+try:
+    import tensorrt as trt
+    import pycuda.driver as cuda
+    import pycuda.autoinit
+    HAS_TENSORRT = True
+except ImportError:
+    trt = None
+    cuda = None
+    HAS_TENSORRT = False
 
 logger = logging.getLogger(__name__)
+
+if not HAS_TENSORRT:
+    logger.warning(
+        "TensorRT/PyCUDA not available. TensorRT model loading disabled. "
+        "PyTorch and ONNX models will still work."
+    )
 
 
 class ModelFormat(Enum):
@@ -61,13 +76,15 @@ class ModelInfo:
 class TensorRTModel:
     """Wrapper for TensorRT engine execution."""
 
-    def __init__(self, engine: trt.ICudaEngine):
+    def __init__(self, engine):
         """
         Initialize TensorRT model wrapper.
 
         Args:
             engine: TensorRT engine
         """
+        if not HAS_TENSORRT:
+            raise RuntimeError("TensorRT is not installed. Cannot create TensorRTModel.")
         self.engine = engine
         self.context = engine.create_execution_context()
         self.stream = cuda.Stream()
@@ -212,13 +229,17 @@ class ModelLoader:
         # Thread safety
         self._lock = threading.RLock()
 
-        # TensorRT runtime (shared across models)
-        self._trt_logger = trt.Logger(trt.Logger.WARNING)
-        self._trt_runtime = trt.Runtime(self._trt_logger)
+        # TensorRT runtime (shared across models) — only if available
+        if HAS_TENSORRT:
+            self._trt_logger = trt.Logger(trt.Logger.WARNING)
+            self._trt_runtime = trt.Runtime(self._trt_logger)
+        else:
+            self._trt_logger = None
+            self._trt_runtime = None
 
         logger.info(
             f"Initialized ModelLoader: cache_dir={cache_dir}, "
-            f"max_cache_size={max_cache_size_mb}MB"
+            f"max_cache_size={max_cache_size_mb}MB, tensorrt={'enabled' if HAS_TENSORRT else 'disabled'}"
         )
 
     def load_model(
@@ -344,6 +365,11 @@ class ModelLoader:
 
     def _load_tensorrt_model(self, model_path: Path) -> TensorRTModel:
         """Load TensorRT engine."""
+        if not HAS_TENSORRT:
+            raise RuntimeError(
+                "TensorRT is not installed. Install tensorrt-cu12 to load TensorRT models, "
+                "or use PyTorch/ONNX format instead."
+            )
         logger.info(f"Loading TensorRT engine from {model_path}")
 
         # Read serialized engine
@@ -364,9 +390,26 @@ class ModelLoader:
 
         model = torch.load(model_path, map_location='cpu')
 
-        # Move to GPU if available
+        # Try to move to GPU, fall back to CPU if kernels not available
+        # (e.g. torch compiled without sm_120 support for RTX 5070/Blackwell)
         if torch.cuda.is_available():
-            model = model.cuda()
+            try:
+                model = model.cuda()
+                # Test that kernels actually work with a small operation
+                dummy = torch.zeros(1, device='cuda')
+                del dummy
+                logger.info("Model loaded on GPU")
+            except RuntimeError as e:
+                if "no kernel image" in str(e) or "CUDA" in str(e):
+                    logger.warning(
+                        f"GPU kernels not available for this architecture, "
+                        f"falling back to CPU: {e}"
+                    )
+                    model = model.cpu()
+                else:
+                    raise
+        else:
+            logger.info("CUDA not available, loading model on CPU")
 
         model.eval()
 
