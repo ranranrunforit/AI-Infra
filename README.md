@@ -27,7 +27,7 @@ FastAPI, Docker, Kubernetes, Prometheus, Grafana
 
 **[End-to-End MLOps Pipeline](./mlops_pipeline)**
 
-Airflow, MLflow, Redis，Postgres，Kubernetes, Prometheus, Grafana, Docker, DVC, MinIO/S3
+Airflow, MLflow, Redis, Postgres, Kubernetes, Prometheus, Grafana, Docker, DVC, MinIO/S3
 
 **[LLM Deployment Platform](./llm_deployment)**
 
@@ -39,4 +39,4 @@ Ray, Prometheus, Grafana, NCCL, DCGM, Kubernetes, Docker
 
 **[High-Performance Model Serving with TensorRT-LLM](./model_serving)**
 
-FastAPI, TensorRT, ONNX, vLLM, Redis，Postgres，Prometheus, Jaeger, Grafana
+FastAPI, TensorRT, ONNX, vLLM, Redis, Postgres, Prometheus, Jaeger, Grafana
