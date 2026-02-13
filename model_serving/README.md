@@ -215,6 +215,17 @@ docker compose -f docker/docker-compose.yml down -v
 docker ps -a --filter name=model-serving
 docker volume ls --filter name=model-cache
 docker images model-serving
+
+# Debug
+# Rebuild
+docker stop model-serving
+docker build -t model-serving:latest -f docker/Dockerfile .
+docker run --rm -d --name model-serving --gpus all -p 8000:8000 -v model-cache:/app/models -e CUDA_VISIBLE_DEVICES=0 -e GPU_MEMORY_FRACTION=0.85 model-serving:latest
+
+# Convert to ONNX (recommended)
+docker exec -it model-serving python /app/scripts/convert_model.py --model resnet18 --format onnx --output /tmp/model_cache/resnet18.onnx
+# Or save as PyTorch (simplest)
+docker exec -it model-serving python /app/scripts/convert_model.py --model resnet18 --format pytorch --output /tmp/model_cache/resnet18.pt
 ```
 
 ### Kubernetes Deployment
