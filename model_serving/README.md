@@ -248,6 +248,119 @@ kubectl get svc -n model-serving
 # 4. Access the service
 export SERVICE_URL=$(kubectl get svc model-serving -n model-serving -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 curl http://$SERVICE_URL/health
+
+
+## Option 3: Kubernetes (minikube)
+
+### Step 1: Install minikube in WSL2
+
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube
+# Or Install minikube with winget
+winget install Kubernetes.minikube
+
+# 1. Install CRDs (one-time setup)
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.72.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.72.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/autoscaler/vertical-pod-autoscaler-1.1.2/vertical-pod-autoscaler/deploy/vpa-v1-crd-gen.yaml
+
+# 2. Delete old broken resources
+kubectl delete -k kubernetes/base/ --ignore-not-found
+
+# 3. Deploy fresh — no errors this time
+kubectl apply -k kubernetes/base/
+
+
+# Start with Docker driver and GPU support
+minikube start --driver=docker --gpus=all --memory=16384 --cpus=4
+
+
+### Step 2: Load the Docker Image into minikube
+
+# Build image
+docker build -t model-serving:latest -f docker/Dockerfile .
+
+# Load into minikube
+minikube image load model-serving:latest
+
+
+### Step 3: Deploy
+
+# Apply base Kubernetes manifests
+kubectl apply -k kubernetes/base/
+
+# Verify pods
+kubectl get pods
+
+# Wait for pods to be Running
+kubectl wait --for=condition=Ready pod -l app=model-serving --timeout=300s
+
+### Step 4: Access the Service
+
+# Port forward
+kubectl port-forward svc/model-serving 8000:8000
+
+# Test
+curl.exe http://localhost:8000/health
+
+
+### Step 5: View Logs
+
+kubectl logs -l app=model-serving -f
+
+
+### Step 6: Cleanup
+
+kubectl delete -k kubernetes/base/
+minikube stop
+
+
+
+
+# =============================================================================
+# Restart Kubernetes Deployment (Clean Slate)
+# =============================================================================
+
+# === 1. Deleting existing resources ===
+kubectl delete -k kubernetes/observability/ --ignore-not-found
+kubectl delete -k kubernetes/base/ --ignore-not-found
+
+
+# === 2. Deploying Base Resources ===
+kubectl apply -k kubernetes/base/
+
+
+# === 3. Deploying Observability Stack (Jaeger, Prometheus, Grafana) ===
+kubectl apply -k kubernetes/observability/
+
+
+# === 4. Waiting for Pods to be Ready ===
+# Waiting for model-serving
+kubectl wait --for=condition=Ready pod -l app=model-serving --timeout=300s
+
+# Waiting for observability pods
+kubectl wait --for=condition=Ready pod -l app=jaeger --timeout=300s
+kubectl wait --for=condition=Ready pod -l app=prometheus --timeout=300s
+kubectl wait --for=condition=Ready pod -l app=grafana --timeout=300s
+
+# =============================================================================
+# Access Services via Port Forwarding
+# =============================================================================
+
+# Forward ports in background
+kubectl port-forward svc/model-serving 8000:8000 &
+kubectl port-forward svc/jaeger 16686:16686 &
+kubectl port-forward svc/prometheus 9090:9090 &
+kubectl port-forward svc/grafana 3000:3000 &
+
+# =============================================================================
+# Teardown Kubernetes Deployment
+# =============================================================================
+
+# === Deleting Resources ===
+kubectl delete -k kubernetes/observability/ --ignore-not-found
+kubectl delete -k kubernetes/base/ --ignore-not-found
+
 ```
 
 ## Project Structure
