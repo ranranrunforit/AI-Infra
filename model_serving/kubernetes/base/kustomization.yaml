@@ -32,7 +32,7 @@ resources:
 - service.yaml
 - configmap.yaml
 - hpa.yaml
-- servicemonitor.yaml
+- servicemonitor.yaml  # Requires CRDs: bash kubernetes/setup-crds.sh
 - pvc.yaml
 - serviceaccount.yaml
 - networkpolicy.yaml
@@ -57,7 +57,7 @@ secretGenerator:
 # Images - define container images to use
 images:
 - name: ai-infra/model-serving
-  newName: ai-infra/model-serving
+  newName: model-serving
   newTag: latest
 
 # Replicas - default replica count (overridden by HPA)

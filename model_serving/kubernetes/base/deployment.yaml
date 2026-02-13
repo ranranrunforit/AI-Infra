@@ -8,8 +8,8 @@ metadata:
     tier: backend
     version: v1
 spec:
-  # Replica count (overridden by HPA and environment-specific overlays)
-  replicas: 2
+  # Replica count (1 for local dev, overridden by HPA in production)
+  replicas: 1
 
   # Deployment strategy - RollingUpdate for zero-downtime deployments
   strategy:
@@ -35,7 +35,7 @@ spec:
       annotations:
         # Prometheus scraping configuration
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9090"
+        prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
         # Force pod restart on config changes
         checksum/config: "{{ include (print $.Template.BasePath '/configmap.yaml') . | sha256sum }}"
@@ -53,20 +53,17 @@ spec:
         seccompProfile:
           type: RuntimeDefault
 
-      # Node affinity - schedule on GPU nodes
+      # Node affinity - prefer GPU nodes (not required for local dev)
       affinity:
-        # Require GPU nodes
+        # Prefer GPU nodes when available
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: nvidia.com/gpu
-                operator: Exists
-              - key: node-role.kubernetes.io/gpu
-                operator: Exists
-          # Prefer nodes with specific GPU types (A100, V100, etc.)
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
+            preference:
+              matchExpressions:
+              - key: nvidia.com/gpu
+                operator: Exists
+          - weight: 90
             preference:
               matchExpressions:
               - key: nvidia.com/gpu.product
@@ -227,27 +224,23 @@ spec:
           mountPath: /tmp
 
         # Resource requests and limits
+        # Adjust for your environment — these are local dev defaults
         resources:
           requests:
-            # CPU: 4 cores minimum for inference workloads
-            cpu: "4000m"
-            # Memory: 16GB for model loading and inference
-            memory: "16Gi"
-            # GPU: 1 NVIDIA GPU
-            nvidia.com/gpu: "1"
+            cpu: "500m"
+            memory: "2Gi"
+            # Uncomment if NVIDIA device plugin is installed:
+            # nvidia.com/gpu: "1"
           limits:
-            # CPU: Allow bursting up to 8 cores
-            cpu: "8000m"
-            # Memory: Hard limit at 32GB
-            memory: "32Gi"
-            # GPU: Hard limit at 1 GPU
-            nvidia.com/gpu: "1"
+            cpu: "4000m"
+            memory: "8Gi"
+            # nvidia.com/gpu: "1"
 
         # Startup probe - gives the app time to initialize
         # Model loading can take several minutes
         startupProbe:
           httpGet:
-            path: /health/startup
+            path: /health
             port: 8000
             scheme: HTTP
           initialDelaySeconds: 10
@@ -259,7 +252,7 @@ spec:
         # Liveness probe - restart container if unhealthy
         livenessProbe:
           httpGet:
-            path: /health/live
+            path: /health
             port: 8000
             scheme: HTTP
           initialDelaySeconds: 30
@@ -271,7 +264,7 @@ spec:
         # Readiness probe - remove from service if not ready
         readinessProbe:
           httpGet:
-            path: /health/ready
+            path: /health
             port: 8000
             scheme: HTTP
           initialDelaySeconds: 20

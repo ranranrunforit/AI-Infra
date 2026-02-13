@@ -1,0 +1,226 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  labels:
+    app: grafana
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+      - name: Jaeger
+        type: jaeger
+        access: proxy
+        url: http://jaeger:16686
+        editable: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  labels:
+    app: grafana
+data:
+  dashboard.yml: |
+    apiVersion: 1
+    providers:
+      - name: "Model Serving Dashboards"
+        orgId: 1
+        folder: "Model Serving"
+        type: file
+        disableDeletion: false
+        editable: true
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  labels:
+    app: grafana
+data:
+  model_serving_dashboard.json: |
+    {
+        "annotations": {
+            "list": []
+        },
+        "editable": true,
+        "fiscalYearStartMonth": 0,
+        "graphTooltip": 1,
+        "id": null,
+        "links": [],
+        "panels": [
+            {
+                "title": "Request Rate",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+                "targets": [
+                    { "expr": "rate(model_serving_requests_total[5m])", "legendFormat": "{{model}} - {{status}}" }
+                ],
+                "fieldConfig": { "defaults": { "unit": "reqps", "color": { "mode": "palette-classic" } } }
+            },
+            {
+                "title": "Request Latency (P50, P95, P99)",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+                "targets": [
+                    { "expr": "histogram_quantile(0.50, rate(model_serving_request_duration_seconds_bucket[5m]))", "legendFormat": "P50" },
+                    { "expr": "histogram_quantile(0.95, rate(model_serving_request_duration_seconds_bucket[5m]))", "legendFormat": "P95" },
+                    { "expr": "histogram_quantile(0.99, rate(model_serving_request_duration_seconds_bucket[5m]))", "legendFormat": "P99" }
+                ],
+                "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "palette-classic" } } }
+            },
+            {
+                "title": "Active Requests",
+                "type": "gauge",
+                "gridPos": { "h": 8, "w": 6, "x": 0, "y": 8 },
+                "targets": [ { "expr": "sum(model_serving_active_requests)", "legendFormat": "Active" } ],
+                "fieldConfig": { "defaults": { "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 100 } ] }, "max": 200 } }
+            },
+            {
+                "title": "Batch Size Distribution",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 6, "x": 6, "y": 8 },
+                "targets": [
+                    { "expr": "histogram_quantile(0.50, rate(model_serving_batch_size_bucket[5m]))", "legendFormat": "Median Batch Size" },
+                    { "expr": "histogram_quantile(0.95, rate(model_serving_batch_size_bucket[5m]))", "legendFormat": "P95 Batch Size" }
+                ]
+            },
+            {
+                "title": "Error Rate",
+                "type": "stat",
+                "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+                "targets": [ { "expr": "sum(rate(model_serving_requests_total{status='error'}[5m])) / sum(rate(model_serving_requests_total[5m])) * 100", "legendFormat": "Error %" } ],
+                "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 } ] } } }
+            },
+            {
+                "title": "Model Load Time",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+                "targets": [ { "expr": "histogram_quantile(0.95, rate(model_serving_model_load_time_seconds_bucket[5m]))", "legendFormat": "{{model}} - {{format}}" } ],
+                "fieldConfig": { "defaults": { "unit": "s" } }
+            },
+            {
+                "title": "Requests by Model",
+                "type": "piechart",
+                "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+                "targets": [ { "expr": "sum by (model) (increase(model_serving_requests_total[1h]))", "legendFormat": "{{model}}" } ]
+            },
+            {
+                "title": "GPU Utilization",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+                "targets": [ { "expr": "model_serving_gpu_utilization", "legendFormat": "GPU {{device}}" } ],
+                "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 95 } ] } } }
+            }
+        ],
+        "schemaVersion": 39,
+        "tags": [ "model-serving", "ml", "inference" ],
+        "templating": { "list": [] },
+        "time": { "from": "now-1h", "to": "now" },
+        "timepicker": {},
+        "timezone": "browser",
+        "title": "Model Serving Overview",
+        "uid": "model-serving-overview",
+        "version": 1
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+        runAsNonRoot: true
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.3.3
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        ports:
+        - name: http
+          containerPort: 3000
+        volumeMounts:
+        - name: datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: dashboards-provider
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: dashboards
+          mountPath: /var/lib/grafana/dashboards
+        - name: data
+          mountPath: /var/lib/grafana
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 30
+      volumes:
+      - name: datasources
+        configMap:
+          name: grafana-datasources
+      - name: dashboards-provider
+        configMap:
+          name: grafana-dashboards-provider
+      - name: dashboards
+        configMap:
+          name: grafana-dashboards
+      - name: data
+        emptyDir:
+          sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  labels:
+    app: grafana
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+  selector:
+    app: grafana

@@ -74,9 +74,9 @@ data:
   # =============================================================================
   TRACING_ENABLED: "true"
   TRACING_EXPORTER: "jaeger"  # Options: jaeger, otlp, console
-  JAEGER_AGENT_HOST: "jaeger-agent.observability.svc.cluster.local"
+  JAEGER_AGENT_HOST: "jaeger"
   JAEGER_AGENT_PORT: "6831"
-  JAEGER_COLLECTOR_ENDPOINT: "http://jaeger-collector.observability.svc.cluster.local:14268/api/traces"
+  JAEGER_COLLECTOR_ENDPOINT: "http://jaeger:14268/api/traces"
   OTEL_SERVICE_NAME: "model-serving"
   OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
   OTEL_TRACES_SAMPLER_ARG: "0.1"  # Sample 10% of traces in production

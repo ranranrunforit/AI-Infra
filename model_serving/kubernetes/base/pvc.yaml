@@ -7,25 +7,18 @@ metadata:
     component: storage
     storage-type: model-cache
 spec:
-  # Access mode - ReadWriteMany for shared access across pods
+  # ReadWriteOnce for local dev; use ReadWriteMany in production with NFS/EFS
   accessModes:
-  - ReadWriteMany
+  - ReadWriteOnce
 
-  # Storage class - use fast SSD storage for model cache
-  storageClassName: fast-ssd  # Update based on your cluster
+  # Use default storageClass for local dev; override to fast-ssd in production
+  storageClassName: standard
 
-  # Requested storage size
   resources:
     requests:
-      storage: 500Gi  # Adjust based on model sizes
+      storage: 5Gi  # 5GB for local dev; increase to 500Gi in production
 
-  # Volume mode - Filesystem (default)
   volumeMode: Filesystem
-
-  # Selector for specific PV (optional)
-  # selector:
-  #   matchLabels:
-  #     type: model-cache
 
 ---
 apiVersion: v1
@@ -37,17 +30,14 @@ metadata:
     component: storage
     storage-type: engine-cache
 spec:
-  # Access mode - ReadWriteMany for shared engine cache
   accessModes:
-  - ReadWriteMany
+  - ReadWriteOnce
 
-  # Storage class - use fast SSD for TensorRT engines
-  storageClassName: fast-ssd
+  storageClassName: standard
 
-  # Requested storage size for TensorRT engine cache
   resources:
     requests:
-      storage: 200Gi
+      storage: 2Gi  # 2GB for local dev; increase to 200Gi in production
 
   volumeMode: Filesystem
 

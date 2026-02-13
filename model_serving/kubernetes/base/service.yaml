@@ -33,10 +33,10 @@ spec:
     protocol: TCP
     # nodePort: 30800   # Optional: for NodePort service type
 
-  # Prometheus metrics port
+  # Prometheus metrics (served on same port as API at /metrics)
   - name: metrics
     port: 9090
-    targetPort: metrics
+    targetPort: http
     protocol: TCP
     # nodePort: 30900   # Optional: for NodePort service type
 
@@ -45,11 +45,10 @@ spec:
     app: model-serving
     component: inference
 
-  # IP families (IPv4/IPv6 support)
-  ipFamilyPolicy: PreferDualStack
+  # IP families (IPv4 only — minikube doesn't support dual-stack)
+  ipFamilyPolicy: SingleStack
   ipFamilies:
   - IPv4
-  - IPv6
 
   # Internal traffic policy - prefer local endpoints for better performance
   internalTrafficPolicy: Local
