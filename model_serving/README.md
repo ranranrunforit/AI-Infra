@@ -167,6 +167,9 @@ docker run --rm -d \
     -e GPU_MEMORY_FRACTION=0.85 \
     model-serving:latest
 
+# Or
+docker run --rm -d --name model-serving --gpus all -p 8000:8000 -v model-cache:/app/models -e CUDA_VISIBLE_DEVICES=0 -e GPU_MEMORY_FRACTION=0.85 model-serving:latest
+
 # Download model & Test
 
 docker exec -it -e TORCH_HOME=/tmp/torch_cache -e XDG_CACHE_HOME=/tmp model-serving python /app/scripts/download_resnet18.py
