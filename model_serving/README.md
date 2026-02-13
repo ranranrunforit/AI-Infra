@@ -347,6 +347,11 @@ kubectl wait --for=condition=Ready pod -l app=grafana --timeout=300s
 # Access Services via Port Forwarding
 # =============================================================================
 
+#  - Model Serving API:  http://localhost:8000"
+#  - Jaeger UI:          http://localhost:16686"
+#  - Prometheus UI:      http://localhost:9090"
+#  - Grafana UI:         http://localhost:3000 (admin/admin)"
+
 # Forward ports in background
 kubectl port-forward svc/model-serving 8000:8000
 kubectl port-forward svc/jaeger 16686:16686
