@@ -37,8 +37,11 @@ spec:
               cpu: 500m
               memory: 512Mi
           ports:
-            - name: metrics
+            - name: http
               containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
               protocol: TCP
           livenessProbe:
             httpGet:

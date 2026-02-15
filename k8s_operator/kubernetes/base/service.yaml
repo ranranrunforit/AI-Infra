@@ -9,8 +9,12 @@ spec:
   selector:
     app: trainingjob-operator
   ports:
-    - name: metrics
+    - name: http
       port: 8080
       targetPort: 8080
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
       protocol: TCP
   type: ClusterIP

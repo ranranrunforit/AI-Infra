@@ -19,9 +19,14 @@ class JobController:
     Controller for managing Kubernetes Job resources for ML training.
     """
 
-    def __init__(self):
-        """Initialize the JobController."""
-        self.k8s_client = get_k8s_client()
+    def __init__(self, k8s_client=None):
+        """
+        Initialize the JobController.
+        
+        Args:
+            k8s_client: Optional K8sClient instance (for testing/DI)
+        """
+        self.k8s_client = k8s_client or get_k8s_client()
         self.job_builder = JobBuilder()
 
     async def create_training_resources(

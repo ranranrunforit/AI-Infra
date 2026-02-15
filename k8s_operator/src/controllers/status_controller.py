@@ -17,9 +17,14 @@ class StatusController:
     Controller for updating TrainingJob status based on actual training progress.
     """
 
-    def __init__(self):
-        """Initialize the StatusController."""
-        self.k8s_client = get_k8s_client()
+    def __init__(self, k8s_client=None):
+        """
+        Initialize the StatusController.
+        
+        Args:
+            k8s_client: Optional K8sClient instance
+        """
+        self.k8s_client = k8s_client or get_k8s_client()
 
     async def update_training_status(
         self,
@@ -112,17 +117,11 @@ class StatusController:
         2. Parse structured logs for training progress
         3. Aggregate metrics across all workers
         4. Return average or sum as appropriate
-
-        Args:
-            pods: Pod list
-            klogger: Kopf logger
-
-        Returns:
-            Training metrics dictionary
         """
-        # Placeholder implementation
-        # In production, parse actual logs or query metrics endpoints
-        metrics = {
+        import json
+        import re
+
+        metrics_data = {
             'epoch': 0,
             'progress': 0,
             'loss': 0.0,
@@ -130,7 +129,57 @@ class StatusController:
             'gpuUtilization': 0.0,
         }
 
-        return metrics
+        if not pods or not pods.items:
+            return metrics_data
+
+        # We'll look at the first worker's logs for simplicity in this implementation
+        # In a real distributed setting, we might aggregate or look at rank-0
+        pod = pods.items[0]
+        pod_name = pod.metadata.name
+        namespace = pod.metadata.namespace
+
+        try:
+            # Get recent logs
+            logs = self.k8s_client.get_pod_logs(
+                name=pod_name,
+                namespace=namespace,
+                tail_lines=50
+            )
+
+            if not logs:
+                return metrics_data
+
+            # Parse logs for JSON metrics
+            # Expected format: {"loss": 0.5, "accuracy": 0.9, "epoch": 1, "progress": 10, "gpu_util": 85}
+            for line in reversed(logs.splitlines()):
+                try:
+                    # Look for JSON-like structure
+                    json_match = re.search(r'\{.*\}', line)
+                    if json_match:
+                        data = json.loads(json_match.group(0))
+                        
+                        # Update metrics if keys exist
+                        if 'epoch' in data:
+                            metrics_data['epoch'] = int(data['epoch'])
+                        if 'progress' in data:
+                            metrics_data['progress'] = float(data['progress'])
+                        if 'loss' in data:
+                            metrics_data['loss'] = float(data['loss'])
+                        if 'accuracy' in data:
+                            metrics_data['accuracy'] = float(data['accuracy'])
+                        if 'gpu_util' in data:
+                            metrics_data['gpuUtilization'] = float(data['gpu_util'])
+                        
+                        # Once we find the latest metric line, break (assuming logs are chronological)
+                        # Since we iterate reversed, the first match is the latest
+                        break
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+        except Exception as e:
+            klogger.warning(f"Failed to extract metrics from pod {pod_name}: {e}")
+
+        return metrics_data
 
     def _calculate_duration(self, start_time: str) -> str:
         """

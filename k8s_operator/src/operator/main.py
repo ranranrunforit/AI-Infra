@@ -1,18 +1,12 @@
-"""
-Main entry point for the TrainingJob operator.
-
-This operator uses Kopf (Kubernetes Operator Pythonic Framework) to watch
-and reconcile TrainingJob custom resources.
-"""
-
 import kopf
 import logging
 import os
 from typing import Dict, Any
 from datetime import datetime
 import time
+from prometheus_client import start_http_server
 
-from ..utils import get_logger, setup_logging, metrics, get_k8s_client
+from ..utils import get_logger, setup_logging, metrics, K8sClient
 from ..controllers.job_controller import JobController
 from ..controllers.status_controller import StatusController
 from ..controllers.checkpoint_controller import CheckpointController
@@ -24,10 +18,11 @@ setup_logging(level=log_level, structured=structured_logging)
 
 logger = get_logger(__name__)
 
-# Initialize controllers
-job_controller = JobController()
-status_controller = StatusController()
-checkpoint_controller = CheckpointController()
+# Initialize K8s client and controllers
+k8s_client = None
+job_controller = None
+status_controller = None
+checkpoint_controller = None
 
 # Operator configuration
 OPERATOR_NAMESPACE = os.getenv('OPERATOR_NAMESPACE', 'ml-training')
@@ -37,14 +32,33 @@ PLURAL = 'trainingjobs'
 
 
 @kopf.on.startup()
-def configure(settings: kopf.OperatorSettings, **_):
+async def startup(settings: kopf.OperatorSettings, **kwargs):
     """
     Configure the operator on startup.
-
-    Args:
-        settings: Operator settings
     """
     logger.info("Starting TrainingJob operator")
+    
+    # Start Prometheus metrics server
+    try:
+        # Start on port 9090 to avoid conflict with Kopf healthz (8080)
+        start_http_server(9090)
+        logger.info("Prometheus metrics server started on port 9090")
+    except Exception as e:
+        logger.error(f"Failed to start metrics server: {e}")
+
+    # Initialize K8s client
+    global k8s_client, job_controller, status_controller, checkpoint_controller
+    try:
+        k8s_client = K8sClient()
+        # Initialize controllers with dependency injection
+        job_controller = JobController(k8s_client)
+        status_controller = StatusController(k8s_client)
+        checkpoint_controller = CheckpointController(k8s_client)
+        
+        logger.info("Operator initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize operator: {e}")
+        raise kopf.PermanentError(f"Failed to initialize operator: {e}")
 
     # Configure kopf settings
     settings.posting.level = logging.WARNING
