@@ -44,3 +44,7 @@ FastAPI, TensorRT, ONNX, vLLM, Redis, Postgres, Prometheus, Jaeger, Grafana
 **[Multi-Region ML Platform](./multi_region)**
 
 Terraform, Route53, AWS EKS, GCP GKE, Azure AKS, Prometheus, Grafana
+
+**[Kubernetes Operator for ML Training Jobs](./k8s_operator)**
+
+TrainingJob CRD, Kopf, PVC, S3, GCS, NFS, GO
