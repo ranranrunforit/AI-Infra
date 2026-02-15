@@ -1,6 +1,6 @@
 # TrainingJob Kubernetes Operator
 
-**Project 204: Kubernetes Operator for ML Training Jobs**
+**Project 12: Kubernetes Operator for ML Training Jobs**
 
 A production-ready Kubernetes operator that automates the lifecycle management of machine learning training jobs. Built using Python and the Kopf framework, this operator demonstrates advanced Kubernetes controller patterns, distributed training orchestration, and production-grade observability.
 
@@ -1164,43 +1164,6 @@ Document procedures for:
 - Recovering training jobs
 - Restoring from checkpoints
 
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Run linting and tests
-5. Submit a pull request
-
-### Code Standards
-
-- Follow PEP 8 style guide
-- Add type hints
-- Write docstrings
-- Include unit tests
-- Update documentation
-
-## License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Built with [Kopf](https://kopf.readthedocs.io/)
-- Inspired by Kubeflow Training Operator
-- Uses NVIDIA GPU Operator for GPU management
-
-## Contact
-
-For questions or support:
-- **Issues**: [GitHub Issues](https://github.com/ai-infra-curriculum/issues)
-- **Email**: ai-infra-curriculum@joshua-ferguson.com
-- **Documentation**: [Full Docs](https://docs.ai-infra-curriculum.com)
-
 ## Additional Resources
 
 - [Kubernetes Operators](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
@@ -1208,9 +1171,3 @@ For questions or support:
 - [Distributed Training with PyTorch](https://pytorch.org/tutorials/intermediate/ddp_tutorial.html)
 - [NCCL Documentation](https://docs.nvidia.com/deeplearning/nccl/)
 - [Kopf Framework](https://kopf.readthedocs.io/)
-
----
-
-**Version**: 1.0.0
-**Last Updated**: October 2025
-**Maintainers**: AI Infrastructure Curriculum Team
