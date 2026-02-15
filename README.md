@@ -40,3 +40,7 @@ Ray, Prometheus, Grafana, NCCL, DCGM, Kubernetes, Docker
 **[High-Performance Model Serving with TensorRT-LLM](./model_serving)**
 
 FastAPI, TensorRT, ONNX, vLLM, Redis, Postgres, Prometheus, Jaeger, Grafana
+
+**[Multi-Region ML Platform](./multi_region)**
+
+Terraform, Route53, AWS EKS, GCP GKE, Azure AKS, Prometheus, Grafana
