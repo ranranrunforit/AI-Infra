@@ -262,12 +262,29 @@ class ModelReplicator:
     with integrity checking, versioning, and conflict resolution.
     """
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, registry=None):
         self.config = config
         self.adapters: Dict[str, CloudStorageAdapter] = {}
         self.replication_queue: asyncio.Queue = asyncio.Queue()
         self.status_tracker: Dict[str, ReplicationStatus] = {}
         self._initialize_adapters()
+        
+        # Metrics
+        from prometheus_client import Counter, Histogram
+        self.registry = registry
+        if self.registry:
+            self.replication_counter = Counter(
+                'model_replication_total', 
+                'Total model replication attempts',
+                ['source_region', 'target_region', 'status'],
+                registry=self.registry
+            )
+            self.replication_duration = Histogram(
+                'model_replication_duration_seconds',
+                'Model replication duration',
+                ['source_region', 'target_region'],
+                registry=self.registry
+            )
 
     def _initialize_adapters(self):
         """Initialize storage adapters for each region"""
@@ -447,6 +464,20 @@ class ModelReplicator:
                 f"to {target_region}"
             )
 
+            # Record metrics
+            if self.registry:
+                self.replication_counter.labels(
+                    source_region=metadata.source_region,
+                    target_region=target_region,
+                    status="success"
+                ).inc()
+                
+                duration = (datetime.utcnow() - datetime.fromisoformat(status.started_at)).total_seconds()
+                self.replication_duration.labels(
+                    source_region=metadata.source_region,
+                    target_region=target_region
+                ).observe(duration)
+
             # Cleanup temp files
             Path(temp_model_path).unlink(missing_ok=True)
             Path(temp_metadata_path).unlink(missing_ok=True)
@@ -456,33 +487,112 @@ class ModelReplicator:
             status.error_message = str(e)
             status.completed_at = datetime.utcnow().isoformat()
             logger.error(f"Replication to {target_region} failed: {e}")
+            
+            # Record metrics
+            if self.registry:
+                self.replication_counter.labels(
+                    source_region=metadata.source_region,
+                    target_region=target_region,
+                    status="failure"
+                ).inc()
 
         return status
 
     async def sync_models(self) -> Dict[str, List[str]]:
         """Synchronize all models across regions"""
-
         all_models = {}
 
         # Discover models in each region
         for region_name, adapter in self.adapters.items():
             models = await adapter.list_objects("models/")
-            all_models[region_name] = models
-            logger.info(f"Found {len(models)} models in {region_name}")
+            # Filter to only include model binaries, not metadata
+            model_binaries = [m for m in models if m.endswith('model.bin')]
+            all_models[region_name] = model_binaries
+            logger.info(f"Found {len(model_binaries)} models in {region_name}")
 
         # Find missing models in each region
-        all_model_keys = set()
+        # We assume models are keyed by "models/{model_id}/{version}/model.bin"
+        unique_model_keys = set()
         for models in all_models.values():
-            all_model_keys.update(models)
+            unique_model_keys.update(models)
 
         sync_plan = {}
         for region_name, models in all_models.items():
-            missing = all_model_keys - set(models)
+            existing_set = set(models)
+            missing = []
+            for key in unique_model_keys:
+                if key not in existing_set:
+                    missing.append(key)
+            
             if missing:
-                sync_plan[region_name] = list(missing)
+                sync_plan[region_name] = missing
                 logger.info(f"Region {region_name} missing {len(missing)} models")
 
+        # Execute Sync
+        for target_region, missing_keys in sync_plan.items():
+            for key in missing_keys:
+                # Key format: models/{model_id}/{version}/model.bin
+                try:
+                    parts = key.split('/')
+                    if len(parts) >= 4:
+                        model_id = parts[1]
+                        version = parts[2]
+                        
+                        # Find a source region that has this model
+                        source_region = None
+                        for r, m in all_models.items():
+                            if key in m:
+                                source_region = r
+                                break
+                        
+                        if source_region:
+                            # Fetch metadata first (we need it for Replicate call)
+                            metadata_key = f"models/{model_id}/{version}/metadata.json"
+                            source_adapter = self.adapters[source_region]
+                            try:
+                                # We need to download metadata to construct ModelMetadata object
+                                # or we can implement a lighter weight copy if adapters support it.
+                                # For now, let's respect the existing replicate_model signature
+                                # which handles download/upload.
+                                # But replicate_model expects a LOCAL file path.
+                                # We need a cross-region copy method.
+                                
+                                # Let's use _replicate_to_region directly if we can construct metadata
+                                # Download metadata first
+                                temp_meta_path = f"/tmp/{model_id}_{version}_meta_sync.json"
+                                await source_adapter.download(metadata_key, temp_meta_path)
+                                
+                                with open(temp_meta_path, 'r') as f:
+                                    meta_dict = json.load(f)
+                                
+                                metadata = ModelMetadata(**meta_dict)
+                                
+                                # Trigger replication
+                                await self._replicate_to_region(
+                                    key, metadata_key, metadata, target_region
+                                )
+                                
+                                Path(temp_meta_path).unlink(missing_ok=True)
+                                
+                            except Exception as e:
+                                logger.error(f"Failed to sync {key} from {source_region} to {target_region}: {e}")
+                        else:
+                            logger.error(f"Source not found for {key}")
+                except Exception as e:
+                    logger.error(f"Error processing key {key}: {e}")
+
         return sync_plan
+
+    async def continuous_replication(self, interval_seconds: int = 300):
+        """Continuously replicate models across regions"""
+        logger.info(f"Starting continuous replication (interval: {interval_seconds}s)")
+        while True:
+            try:
+                await self.sync_models()
+                await asyncio.sleep(interval_seconds)
+            except Exception as e:
+                logger.error(f"Error in continuous replication: {e}")
+                await asyncio.sleep(interval_seconds)
 
     async def get_replication_status(
         self,

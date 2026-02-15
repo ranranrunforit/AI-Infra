@@ -195,8 +195,27 @@ class FailoverController:
         self.primary_region: Optional[str] = config.get('primary_region')
         self.failover_enabled = config.get('failover_enabled', True)
         self.min_healthy_regions = config.get('min_healthy_regions', 1)
+        self.min_healthy_regions = config.get('min_healthy_regions', 1)
         self._running = False
         self._initialize_regions()
+        
+        # Metrics
+        from prometheus_client import Counter, Gauge
+        self.registry = config.get('registry')
+        
+        if self.registry:
+            self.failover_counter = Counter(
+                'failover_events_total',
+                'Total failover events',
+                ['source_region', 'target_region', 'reason', 'status'],
+                registry=self.registry
+            )
+            self.region_health_gauge = Gauge(
+                'region_health_status',
+                'Region health status (1=Healthy, 0=Unhealthy)',
+                ['region'],
+                registry=self.registry
+            )
 
     def _initialize_regions(self):
         """Initialize region status tracking"""
@@ -258,6 +277,10 @@ class FailoverController:
             f"response_time={status.response_time_ms:.2f}ms, "
             f"failures={status.consecutive_failures}"
         )
+
+        if self.registry:
+            is_healthy = 1 if status.health in [RegionHealth.HEALTHY, RegionHealth.DEGRADED] else 0
+            self.region_health_gauge.labels(region=region_name).set(is_healthy)
 
         return status
 
@@ -398,6 +421,15 @@ class FailoverController:
             event.status = "failed"
             event.error_message = str(e)
             logger.error(f"Failover failed: {e}")
+
+        # Record metrics
+        if self.registry:
+            self.failover_counter.labels(
+                source_region=event.source_region or "unknown",
+                target_region=event.target_region,
+                reason=event.reason,
+                status=event.status
+            ).inc()
 
         return event
 

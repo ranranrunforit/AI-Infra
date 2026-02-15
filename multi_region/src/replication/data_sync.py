@@ -99,6 +99,33 @@ class DataSync:
         from .model_replicator import S3Adapter, GCSAdapter, AzureBlobAdapter
         self.adapters: Dict[str, any] = {}
         self._initialize_adapters()
+        
+        # Metrics
+        from prometheus_client import Counter, Gauge
+        self.registry = config.get('registry') # Optionally get from config or pass explicitly
+        
+        # Use a dummy registry or None if not provided, but ideally we want one.
+        # We'll assume it might be set later or passed in config
+        
+        if self.registry:
+            self.sync_jobs_counter = Counter(
+                'data_sync_jobs_total',
+                'Total data sync jobs',
+                ['dataset_id', 'status'],
+                registry=self.registry
+            )
+            self.files_synced_counter = Counter(
+                'data_files_synced_total',
+                'Total files synchronized',
+                ['source_region', 'target_region'],
+                registry=self.registry
+            )
+            self.sync_lag = Gauge(
+                'data_sync_lag_seconds',
+                'Replication lag in seconds',
+                ['source_region', 'target_region'],
+                registry=self.registry
+            )
 
     def _initialize_adapters(self):
         """Initialize storage adapters for each region"""
@@ -293,18 +320,36 @@ class DataSync:
 
                     # Cleanup
                     Path(temp_path).unlink(missing_ok=True)
+                    
+                    if self.registry:
+                        self.files_synced_counter.labels(
+                            source_region=job.source_region,
+                            target_region=target_region
+                        ).inc()
 
                 logger.info(f"Synced {len(files_to_sync)} files to {target_region}")
 
             job.status = "completed"
             job.completed_at = datetime.utcnow().isoformat()
             job.progress_percent = 100.0
+            
+            if self.registry:
+                self.sync_jobs_counter.labels(
+                    dataset_id=job.dataset_id,
+                    status="success"
+                ).inc()
 
         except Exception as e:
             job.status = "failed"
             job.error_message = str(e)
             job.completed_at = datetime.utcnow().isoformat()
             logger.error(f"Sync job {job.job_id} failed: {e}")
+            
+            if self.registry:
+                self.sync_jobs_counter.labels(
+                    dataset_id=job.dataset_id,
+                    status="failure"
+                ).inc()
 
         return job
 
@@ -345,16 +390,70 @@ class DataSync:
 
         while self._running:
             try:
-                # Discover datasets in all regions
-                for region_name, adapter in self.adapters.items():
-                    datasets = await adapter.list_objects("datasets/")
+                # 1. Discover all unique datasets across all regions
+                all_datasets = set()
+                region_datasets = {}
 
-                    # Create sync jobs for new datasets
-                    for dataset_key in datasets:
-                        # Check if this dataset needs syncing
-                        # This is a simplified version - in production,
-                        # you'd track which datasets have been synced
-                        pass
+                for region_name, adapter in self.adapters.items():
+                    # We look for metadata.json files to identify datasets
+                    # Structure: datasets/{dataset_id}/metadata.json
+                    try:
+                        objects = await adapter.list_objects("datasets/")
+                        metadata_files = [o for o in objects if o.endswith("metadata.json")]
+                        
+                        datasets = []
+                        for meta_file in metadata_files:
+                            # Extract dataset_id from path
+                            # datasets/xyz/metadata.json -> xyz
+                            parts = meta_file.split('/')
+                            if len(parts) >= 3:
+                                datasets.append(parts[1])
+                        
+                        region_datasets[region_name] = set(datasets)
+                        all_datasets.update(datasets)
+                    except Exception as e:
+                        logger.error(f"Error listing datasets in {region_name}: {e}")
+
+                # 2. Check for missing datasets in regions and trigger sync
+                for dataset_id in all_datasets:
+                    # Find which regions have this dataset
+                    present_in = [r for r, ds in region_datasets.items() if dataset_id in ds]
+                    missing_in = [r for r in self.adapters.keys() if r not in present_in]
+                    
+                    if not missing_in:
+                        continue
+                        
+                    # Calculate who should be the source
+                    # Ideally the one with the most recent update, but for now just pick the first one found
+                    source_region = present_in[0]
+                    
+                    # Need metadata to create SyncJob
+                    try:
+                        source_adapter = self.adapters[source_region]
+                        meta_key = f"datasets/{dataset_id}/metadata.json"
+                        
+                        # Download metadata to read it
+                        temp_path = f"/tmp/{dataset_id}_meta_sync.json"
+                        await source_adapter.download(meta_key, temp_path)
+                        
+                        with open(temp_path, 'r') as f:
+                            meta_data = json.load(f)
+                        
+                        metadata = DatasetMetadata(**meta_data)
+                        Path(temp_path).unlink(missing_ok=True)
+                        
+                        # Create sync job
+                        job = await self.create_sync_job(
+                            metadata, 
+                            missing_in,
+                            strategy=SyncStrategy.INCREMENTAL
+                        )
+                        
+                        logger.info(f"Triggering auto-sync for {dataset_id} from {source_region} to {missing_in}")
+                        await self.execute_sync_job(job)
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to auto-sync dataset {dataset_id}: {e}")
 
                 await asyncio.sleep(self.sync_interval)
 

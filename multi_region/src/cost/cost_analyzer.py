@@ -77,25 +77,39 @@ class CostAnalyzer:
         self.cost_data: List[CostData] = []
         self.budgets: Dict[str, Dict] = config.get('budgets', {})
         self.budget_alerts: List[BudgetAlert] = []
+        
+        # Initialize client attributes
+        self.aws_ce = None
+        self.gcp_billing = None
+        self.azure_cost = None
+        self.azure_credential = None
+        
         self._initialize_clients()
 
     def _initialize_clients(self):
         """Initialize cloud provider cost management clients"""
         # AWS Cost Explorer
-        self.aws_ce = boto3.client(
-            'ce',
-            region_name=self.config.get('aws_region', 'us-west-2')
-        )
-
-        # GCP Billing (requires service account)
         try:
+            self.aws_ce = boto3.client(
+                'ce',
+                region_name=self.config.get('aws_region', 'us-west-2')
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize AWS client: {e}")
+
+        # GCP Billing (standard is now BigQuery, so we might just check creds here or skip)
+        # We'll keep the client for potential catalog lookups if needed
+        try:
+            from google.cloud import billing_v1
             self.gcp_billing = billing_v1.CloudBillingClient()
         except Exception as e:
             logger.warning(f"Failed to initialize GCP billing client: {e}")
-            self.gcp_billing = None
 
         # Azure Cost Management
         try:
+            from azure.identity import DefaultAzureCredential
+            from azure.mgmt.costmanagement import CostManagementClient
+            
             self.azure_credential = DefaultAzureCredential()
             self.azure_cost = CostManagementClient(
                 self.azure_credential,
@@ -103,7 +117,6 @@ class CostAnalyzer:
             )
         except Exception as e:
             logger.warning(f"Failed to initialize Azure cost client: {e}")
-            self.azure_cost = None
 
         logger.info("Initialized cost management clients")
 
@@ -165,23 +178,55 @@ class CostAnalyzer:
         start_date: str,
         end_date: str
     ) -> List[CostData]:
-        """Retrieve GCP costs from Cloud Billing"""
-        if not self.gcp_billing:
-            logger.warning("GCP billing client not available")
+        """Retrieve GCP costs from BigQuery Billing Export"""
+        # Note: GCP Billing API provides catalog info, but actual cost/usage typically comes from BigQuery export
+        table_variable = self.config.get('gcp_billing_table')
+        if not table_variable:
+            logger.warning("GCP billing table not configured (gcp_billing_table)")
             return []
 
-        logger.info(f"Fetching GCP costs from {start_date} to {end_date}")
+        logger.info(f"Fetching GCP costs from BigQuery {table_variable} from {start_date} to {end_date}")
 
         try:
-            # GCP BigQuery query would go here
-            # This is a simplified version - in production you'd query BigQuery
-            # export of billing data
+            from google.cloud import bigquery
+            client = bigquery.Client(project=self.config.get('gcp_project_id'))
+
+            query = f"""
+                SELECT
+                    service.description as service,
+                    location.location as region,
+                    SUM(cost) as amount,
+                    currency
+                FROM `{table_variable}`
+                WHERE usage_start_time >= TIMESTAMP('{start_date}')
+                AND usage_end_time <= TIMESTAMP('{end_date}')
+                GROUP BY 1, 2, 4
+            """
+
+            query_job = await asyncio.to_thread(client.query, query)
+            results = await asyncio.to_thread(query_job.result)
 
             costs = []
-            # Placeholder for GCP cost data
-            logger.info("Retrieved 0 GCP cost entries (requires BigQuery setup)")
+            for row in results:
+                amount = Decimal(str(row.amount))
+                if amount > 0:
+                    costs.append(CostData(
+                        service=row.service,
+                        region=row.region or 'global',
+                        provider='gcp',
+                        amount=amount,
+                        currency=row.currency,
+                        start_date=start_date,
+                        end_date=end_date,
+                        unit='USD'  # BigQuery export is usually in account currency
+                    ))
+
+            logger.info(f"Retrieved {len(costs)} GCP cost entries")
             return costs
 
+        except ImportError:
+            logger.error("google-cloud-bigquery not installed")
+            return []
         except Exception as e:
             logger.error(f"Failed to retrieve GCP costs: {e}")
             return []
@@ -199,10 +244,63 @@ class CostAnalyzer:
         logger.info(f"Fetching Azure costs from {start_date} to {end_date}")
 
         try:
-            # Azure Cost Management query
+            # Azure scope can be subscription or resource group
+            scope = f"/subscriptions/{self.config.get('azure_subscription_id')}"
+            
+            # Construct query definition
+            query_definition = {
+                "type": "Usage",
+                "timeframe": "Custom",
+                "timePeriod": {
+                    "from": f"{start_date}T00:00:00+00:00",
+                    "to": f"{end_date}T23:59:59+00:00"
+                },
+                "dataset": {
+                    "granularity": "Daily",
+                    "aggregation": {
+                        "totalCost": {
+                            "name": "Cost",
+                            "function": "Sum"
+                        }
+                    },
+                    "grouping": [
+                        {
+                            "type": "Dimension",
+                            "name": "ServiceName"
+                        },
+                        {
+                            "type": "Dimension",
+                            "name": "ResourceLocation"
+                        }
+                    ]
+                }
+            }
+
+            # Run query
+            result = await asyncio.to_thread(
+                self.azure_cost.query.usage,
+                scope,
+                parameters=query_definition
+            )
+
             costs = []
-            # Placeholder for Azure cost data
-            logger.info("Retrieved 0 Azure cost entries (requires proper configuration)")
+            # Parse rows: [Cost, Currency, ServiceName, ResourceLocation, Date]
+            # Column mapping depends on query structure, generally standard
+            for row in result.rows:
+                amount = Decimal(str(row[0]))
+                if amount > 0:
+                    costs.append(CostData(
+                        service=row[2],
+                        region=row[3],
+                        provider='azure',
+                        amount=amount,
+                        currency=row[1],
+                        start_date=str(row[4]), # UsageDate
+                        end_date=str(row[4]),
+                        unit=row[1]
+                    ))
+
+            logger.info(f"Retrieved {len(costs)} Azure cost entries")
             return costs
 
         except Exception as e:

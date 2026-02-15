@@ -39,6 +39,12 @@ spec:
           value: "REPLACE_ME"
         - name: LOG_LEVEL
           value: "info"
+        - name: GCP_PROJECT_ID
+          value: "REPLACE_ME"
+        - name: GCP_BILLING_TABLE
+          value: "REPLACE_ME"
+        - name: AZURE_SUBSCRIPTION_ID
+          value: "REPLACE_ME"
         resources:
           requests:
             cpu: "1000m"
