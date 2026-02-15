@@ -1164,30 +1164,6 @@ Document procedures for:
 - Recovering training jobs
 - Restoring from checkpoints
 
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Run linting and tests
-5. Submit a pull request
-
-### Code Standards
-
-- Follow PEP 8 style guide
-- Add type hints
-- Write docstrings
-- Include unit tests
-- Update documentation
-
-## License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
-
 ## Additional Resources
 
 - [Kubernetes Operators](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
