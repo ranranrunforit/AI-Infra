@@ -1,0 +1,78 @@
+apiVersion: ml.example.com/v1
+kind: TrainingJob
+metadata:
+  name: bert-distributed
+  namespace: ml-training
+spec:
+  model: bert-base-uncased
+  dataset: squad
+  numWorkers: 4
+  gpusPerWorker: 2
+  framework: pytorch
+  image: huggingface/transformers-pytorch-gpu:latest
+  command:
+    - python
+    - -m
+    - torch.distributed.run
+  args:
+    - --nproc_per_node=2
+    - train.py
+    - --model_name_or_path=bert-base-uncased
+    - --dataset_name=squad
+  env:
+    - name: NCCL_DEBUG
+      value: INFO
+    - name: NCCL_SOCKET_IFNAME
+      value: eth0
+  resources:
+    requests:
+      memory: 32Gi
+      cpu: "8"
+      nvidia.com/gpu: "2"
+    limits:
+      memory: 64Gi
+      cpu: "16"
+      nvidia.com/gpu: "2"
+  hyperparameters:
+    learningRate: 0.00005
+    batchSize: 16
+    epochs: 3
+    optimizer: adamw
+    warmupSteps: 500
+    gradientAccumulationSteps: 2
+    mixedPrecision: true
+    additionalParams:
+      weight_decay: "0.01"
+      max_seq_length: "384"
+  checkpoint:
+    enabled: true
+    frequency: 1
+    storage:
+      type: s3
+      s3Bucket: ml-checkpoints
+    retention: 5
+  scheduling:
+    priority: high-priority
+    nodeSelector:
+      nvidia.com/gpu.product: A100-SXM4-40GB
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    preemptible: false
+  monitoring:
+    enabled: true
+    metricsPort: 8080
+    tensorboardEnabled: true
+    mlflowTrackingUri: http://mlflow.ml-infra.svc.cluster.local:5000
+  networking:
+    backend: nccl
+    masterPort: 29500
+    rdmaEnabled: false
+  failurePolicy:
+    restartPolicy: OnFailure
+    backoffLimit: 3
+    activeDeadlineSeconds: 86400
+  successPolicy:
+    targetAccuracy: 0.90
+    earlyStoppingPatience: 3
