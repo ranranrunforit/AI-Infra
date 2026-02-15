@@ -291,7 +291,7 @@ pytest tests/ --cov=src --cov-report=html
 
 ## Troubleshooting
 
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues and solutions.
+See [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) for common issues and solutions.
 
 ## Performance Metrics
 
