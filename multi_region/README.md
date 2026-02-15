@@ -1,4 +1,4 @@
-# Project 203: Multi-Region ML Platform
+# Project 11: Multi-Region ML Platform
 
 A production-ready, multi-region ML serving platform spanning AWS, GCP, and Azure with automatic failover, cost optimization, and unified monitoring.
 
@@ -127,7 +127,7 @@ docker-compose -f docker/docker-compose.yml up
 ## Project Structure
 
 ```
-project-203-multi-region/
+project-11-multi-region/
 ├── terraform/                 # Infrastructure as Code
 │   ├── modules/
 │   │   ├── aws/              # AWS EKS module
