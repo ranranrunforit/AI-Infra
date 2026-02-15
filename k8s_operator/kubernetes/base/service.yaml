@@ -1,20 +1,39 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: trainingjob-operator
-  namespace: ml-training
+  name: ml-serving
   labels:
-    app: trainingjob-operator
+    app: ml-platform
+    component: ml-serving
 spec:
-  selector:
-    app: trainingjob-operator
+  type: LoadBalancer
   ports:
-    - name: http
-      port: 8080
-      targetPort: 8080
-      protocol: TCP
-    - name: metrics
-      port: 9090
-      targetPort: 9090
-      protocol: TCP
-  type: ClusterIP
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  selector:
+    app: ml-platform
+    component: ml-serving
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-serving-headless
+  labels:
+    app: ml-platform
+    component: ml-serving
+spec:
+  clusterIP: None
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: ml-platform
+    component: ml-serving
