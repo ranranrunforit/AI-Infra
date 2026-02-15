@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-serving
+  labels:
+    app: ml-platform
+    component: ml-serving
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ml-platform
+      component: ml-serving
+  template:
+    metadata:
+      labels:
+        app: ml-platform
+        component: ml-serving
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ml-serving
+      containers:
+      - name: ml-serving
+        image: ml-platform/ml-serving:latest
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        env:
+        - name: REGION
+          value: "REPLACE_ME"
+        - name: PROVIDER
+          value: "REPLACE_ME"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "2Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: ml-platform-config

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trainingjob-operator
+  namespace: ml-training
+  labels:
+    app: trainingjob-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trainingjob-operator
+  template:
+    metadata:
+      labels:
+        app: trainingjob-operator
+    spec:
+      serviceAccountName: trainingjob-operator
+      containers:
+        - name: operator
+          image: trainingjob-operator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: STRUCTURED_LOGGING
+              value: "true"
+            - name: OPERATOR_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
