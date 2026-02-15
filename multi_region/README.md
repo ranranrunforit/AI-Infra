@@ -309,15 +309,6 @@ See [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) for common issues and solutions.
 - Secrets managed via cloud secret managers
 - Regular security scanning in CI/CD
 
-## Contributing
-
-This is an educational project. For real-world use:
-1. Add comprehensive tests
-2. Implement secrets management
-3. Add authentication/authorization
-4. Configure production monitoring
-5. Set up proper CI/CD pipelines
-
 ## Additional Resources
 
 - [Step-by-Step Guide](docs/STEP_BY_STEP.md)
