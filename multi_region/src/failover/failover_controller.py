@@ -185,7 +185,7 @@ class FailoverController:
     Coordinates with DNS updater for traffic management.
     """
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, alert_manager=None):
         self.config = config
         self.regions: Dict[str, RegionStatus] = {}
         self.failover_history: List[FailoverEvent] = []
@@ -195,10 +195,11 @@ class FailoverController:
         self.primary_region: Optional[str] = config.get('primary_region')
         self.failover_enabled = config.get('failover_enabled', True)
         self.min_healthy_regions = config.get('min_healthy_regions', 1)
-        self.min_healthy_regions = config.get('min_healthy_regions', 1)
         self._running = False
         self._initialize_regions()
         
+        self.alert_manager = alert_manager
+
         # Metrics
         from prometheus_client import Counter, Gauge
         self.registry = config.get('registry')
@@ -388,6 +389,19 @@ class FailoverController:
 
         self.failover_history.append(event)
         logger.info(f"Initiated failover: {self.primary_region} -> {target_region}")
+
+        if self.alert_manager:
+            from ..monitoring.alerting import Alert
+            await self.alert_manager.send_alert(Alert(
+                alert_id=f"alert-{event_id}",
+                name="FailoverInitiated",
+                severity="critical",
+                region=self.primary_region,
+                message=f"Failover initiated from {self.primary_region} to {target_region}. Reason: {reason}",
+                triggered_at=datetime.utcnow().isoformat(),
+                resolved_at=None,
+                labels={"source": self.primary_region or "unknown", "target": target_region}
+            ))
 
         try:
             event.status = "in_progress"

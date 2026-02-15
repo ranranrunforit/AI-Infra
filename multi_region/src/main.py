@@ -14,6 +14,7 @@ from src.replication.model_replicator import ModelReplicator
 from src.replication.data_sync import DataSync
 from src.cost.cost_analyzer import CostAnalyzer
 from src.monitoring.metrics_aggregator import MetricsAggregator
+from src.monitoring.alerting import AlertManager
 
 # Configure logging
 logging.basicConfig(
@@ -68,8 +69,11 @@ async def main():
         # Share registry with other services
         config['registry'] = metrics_aggregator.registry
         
-        # 1. Failover Controller
-        failover_controller = FailoverController(config)
+        # 6. Alert Manager
+        alert_manager = AlertManager(config)
+
+        # 1. FailoverController (with AlertManager)
+        failover_controller = FailoverController(config, alert_manager=alert_manager)
         
         # 2. Model Replicator
         model_replicator = ModelReplicator(config, registry=metrics_aggregator.registry)
