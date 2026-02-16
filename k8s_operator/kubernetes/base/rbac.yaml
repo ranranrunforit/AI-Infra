@@ -1,16 +1,14 @@
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: trainingjob-operator
-  namespace: ml-training
+  name: controller-manager
+  namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: trainingjob-operator
+  name: manager-role
 rules:
-  # TrainingJob CRD permissions
   - apiGroups: ["ml.example.com"]
     resources: ["trainingjobs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -20,30 +18,22 @@ rules:
   - apiGroups: ["ml.example.com"]
     resources: ["trainingjobs/finalizers"]
     verbs: ["update"]
-  # Core resources
-  - apiGroups: [""]
-    resources: ["pods", "pods/log"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: [""]
-    resources: ["services", "configmaps"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["create", "patch"]
-  # Batch resources
   - apiGroups: ["batch"]
     resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "events", "pods"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: trainingjob-operator
+  name: manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: trainingjob-operator
+  name: manager-role
 subjects:
   - kind: ServiceAccount
-    name: trainingjob-operator
-    namespace: ml-training
+    name: controller-manager
+    namespace: default

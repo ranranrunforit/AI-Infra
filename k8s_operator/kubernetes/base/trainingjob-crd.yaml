@@ -2,8 +2,6 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: trainingjobs.ml.example.com
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.13.0
 spec:
   group: ml.example.com
   names:
@@ -13,45 +11,22 @@ spec:
     singular: trainingjob
     shortNames:
       - tj
-      - tjob
   scope: Namespaced
   versions:
     - name: v1
       served: true
       storage: true
-      subresources:
-        status: {}
-      additionalPrinterColumns:
-        - name: State
-          type: string
-          description: Current state of the training job
-          jsonPath: .status.state
-        - name: Progress
-          type: string
-          description: Training progress percentage
-          jsonPath: .status.progress
-        - name: Epoch
-          type: integer
-          description: Current training epoch
-          jsonPath: .status.currentEpoch
-        - name: Age
-          type: date
-          jsonPath: .metadata.creationTimestamp
       schema:
         openAPIV3Schema:
           type: object
-          description: TrainingJob is the Schema for the trainingjobs API
           properties:
             apiVersion:
-              description: 'APIVersion defines the versioned schema of this representation of an object'
               type: string
             kind:
-              description: 'Kind is a string value representing the REST resource this object represents'
               type: string
             metadata:
               type: object
             spec:
-              description: TrainingJobSpec defines the desired state of TrainingJob
               type: object
               required:
                 - model
@@ -59,173 +34,70 @@ spec:
                 - numWorkers
               properties:
                 model:
-                  description: Model architecture to train (e.g., resnet50, bert-base, gpt2)
                   type: string
                   minLength: 1
                 dataset:
-                  description: Dataset to use for training (e.g., imagenet, squad, wikitext)
                   type: string
                   minLength: 1
                 numWorkers:
-                  description: Number of worker replicas for distributed training
                   type: integer
                   minimum: 1
                   maximum: 100
                 gpusPerWorker:
-                  description: Number of GPUs per worker
                   type: integer
                   minimum: 0
                   maximum: 16
                   default: 1
                 framework:
-                  description: ML framework (pytorch, tensorflow, jax)
                   type: string
-                  enum:
-                    - pytorch
-                    - tensorflow
-                    - jax
+                  enum: [pytorch, tensorflow, jax]
                   default: pytorch
                 image:
-                  description: Container image for training
                   type: string
                   default: "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime"
                 command:
-                  description: Command to run in the container
                   type: array
                   items:
                     type: string
                 args:
-                  description: Arguments for the command
                   type: array
                   items:
                     type: string
                 env:
-                  description: Environment variables
                   type: array
                   items:
                     type: object
-                    required:
-                      - name
-                      - value
-                    properties:
-                      name:
-                        type: string
-                      value:
-                        type: string
-                resources:
-                  description: Resource requirements
-                  type: object
-                  properties:
-                    requests:
-                      type: object
-                      additionalProperties:
-                        type: string
-                    limits:
-                      type: object
-                      additionalProperties:
-                        type: string
                 hyperparameters:
-                  description: Training hyperparameters
                   type: object
-                  properties:
-                    learningRate:
-                      type: number
-                      minimum: 0
-                    batchSize:
-                      type: integer
-                      minimum: 1
-                    epochs:
-                      type: integer
-                      minimum: 1
-                    optimizer:
-                      type: string
-                      enum:
-                        - adam
-                        - sgd
-                        - adamw
-                        - rmsprop
-                    warmupSteps:
-                      type: integer
-                      minimum: 0
-                    gradientAccumulationSteps:
-                      type: integer
-                      minimum: 1
-                    mixedPrecision:
-                      type: boolean
-                    additionalParams:
-                      type: object
-                      additionalProperties:
-                        type: string
+                  additionalProperties:
+                    type: string
                 checkpoint:
-                  description: Checkpointing configuration
                   type: object
                   properties:
                     enabled:
                       type: boolean
                       default: true
                     frequency:
-                      description: Checkpoint every N epochs
                       type: integer
-                      minimum: 1
                       default: 5
                     storage:
-                      description: Storage backend for checkpoints
                       type: object
                       properties:
                         type:
                           type: string
-                          enum:
-                            - pvc
-                            - s3
-                            - gcs
-                            - nfs
-                          default: pvc
+                          enum: [pvc, s3, gcs, nfs]
                         pvcName:
                           type: string
-                        s3Bucket:
-                          type: string
-                        gcsBucket:
-                          type: string
-                        nfsServer:
-                          type: string
-                        nfsPath:
-                          type: string
-                    resumeFrom:
-                      description: Path to checkpoint to resume from
-                      type: string
-                    retention:
-                      description: Number of checkpoints to retain
-                      type: integer
-                      minimum: 1
-                      default: 3
                 scheduling:
-                  description: Scheduling configuration
                   type: object
                   properties:
                     priority:
-                      description: Priority class name
                       type: string
                     nodeSelector:
-                      description: Node selector labels
                       type: object
                       additionalProperties:
                         type: string
-                    affinity:
-                      description: Pod affinity and anti-affinity rules
-                      type: object
-                      x-kubernetes-preserve-unknown-fields: true
-                    tolerations:
-                      description: Tolerations for taints
-                      type: array
-                      items:
-                        type: object
-                        x-kubernetes-preserve-unknown-fields: true
-                    preemptible:
-                      description: Allow job to be preempted
-                      type: boolean
-                      default: false
                 monitoring:
-                  description: Monitoring configuration
                   type: object
                   properties:
                     enabled:
@@ -233,139 +105,38 @@ spec:
                       default: true
                     metricsPort:
                       type: integer
-                      minimum: 1024
-                      maximum: 65535
                       default: 8080
-                    tensorboardEnabled:
-                      type: boolean
-                      default: false
                     mlflowTrackingUri:
                       type: string
                     wandbProject:
                       type: string
                 networking:
-                  description: Networking configuration for distributed training
                   type: object
                   properties:
                     backend:
                       type: string
-                      enum:
-                        - nccl
-                        - gloo
-                        - mpi
                       default: nccl
                     masterPort:
                       type: integer
-                      minimum: 1024
-                      maximum: 65535
                       default: 29500
-                    rdmaEnabled:
-                      type: boolean
-                      default: false
-                failurePolicy:
-                  description: Failure handling policy
-                  type: object
-                  properties:
-                    restartPolicy:
-                      type: string
-                      enum:
-                        - Never
-                        - OnFailure
-                        - Always
-                      default: OnFailure
-                    backoffLimit:
-                      type: integer
-                      minimum: 0
-                      default: 3
-                    activeDeadlineSeconds:
-                      type: integer
-                      minimum: 0
-                successPolicy:
-                  description: Success criteria
-                  type: object
-                  properties:
-                    targetAccuracy:
-                      type: number
-                      minimum: 0
-                      maximum: 1
-                    targetLoss:
-                      type: number
-                      minimum: 0
-                    earlyStoppingPatience:
-                      type: integer
-                      minimum: 1
             status:
-              description: TrainingJobStatus defines the observed state of TrainingJob
               type: object
               properties:
                 state:
-                  description: Current state of the training job
                   type: string
-                  enum:
-                    - Pending
-                    - Initializing
-                    - Running
-                    - Completed
-                    - Failed
-                    - Suspended
-                conditions:
-                  description: Current conditions of the training job
-                  type: array
-                  items:
-                    type: object
-                    required:
-                      - type
-                      - status
-                    properties:
-                      type:
-                        type: string
-                      status:
-                        type: string
-                        enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                      reason:
-                        type: string
-                      message:
-                        type: string
-                      lastTransitionTime:
-                        type: string
-                        format: date-time
-                      lastUpdateTime:
-                        type: string
-                        format: date-time
+                  enum: [Pending, Initializing, Running, Completed, Failed, Suspended]
                 progress:
-                  description: Training progress as percentage
                   type: string
                 currentEpoch:
-                  description: Current training epoch
                   type: integer
-                totalEpochs:
-                  description: Total epochs to train
-                  type: integer
-                metrics:
-                  description: Current training metrics
+                resources:
                   type: object
                   properties:
-                    loss:
-                      type: number
-                    accuracy:
-                      type: number
-                    learningRate:
-                      type: number
-                    throughput:
-                      description: Samples per second
-                      type: number
-                    gpuUtilization:
-                      description: Average GPU utilization percentage
-                      type: number
-                    customMetrics:
-                      type: object
-                      additionalProperties:
-                        type: number
+                    allocatedGPUs:
+                      type: integer
+                    allocatedNodes:
+                      type: integer
                 workers:
-                  description: Status of individual workers
                   type: object
                   properties:
                     active:
@@ -376,68 +147,24 @@ spec:
                       type: integer
                     pending:
                       type: integer
-                checkpoint:
-                  description: Checkpoint status
-                  type: object
-                  properties:
-                    latestPath:
-                      type: string
-                    latestEpoch:
-                      type: integer
-                    checkpointCount:
-                      type: integer
-                    lastCheckpointTime:
-                      type: string
-                      format: date-time
-                resources:
-                  description: Allocated resources
-                  type: object
-                  properties:
-                    allocatedGPUs:
-                      type: integer
-                    allocatedNodes:
-                      type: integer
-                    resourceUtilization:
-                      type: object
-                      properties:
-                        cpu:
-                          type: string
-                        memory:
-                          type: string
-                        gpu:
-                          type: string
                 startTime:
-                  description: Time when training started
                   type: string
                   format: date-time
                 completionTime:
-                  description: Time when training completed
                   type: string
                   format: date-time
-                duration:
-                  description: Total training duration
-                  type: string
-                failureReason:
-                  description: Reason for failure if state is Failed
-                  type: string
-                failureMessage:
-                  description: Detailed failure message
-                  type: string
-                restartCount:
-                  description: Number of times the job has been restarted
-                  type: integer
-                events:
-                  description: Recent events
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      timestamp:
-                        type: string
-                        format: date-time
-                      type:
-                        type: string
-                      reason:
-                        type: string
-                      message:
-                        type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: State
+          type: string
+          jsonPath: .status.state
+        - name: Progress
+          type: string
+          jsonPath: .status.progress
+        - name: Epoch
+          type: integer
+          jsonPath: .status.currentEpoch
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
