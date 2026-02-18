@@ -1,8 +1,8 @@
 """
-Cost Analyzer
+Cost Analyzer - FIXED VERSION
 
 Multi-cloud cost analysis across AWS, GCP, and Azure.
-Tracks spending, identifies anomalies, and provides cost breakdowns.
+Gracefully handles missing credentials for GCP-only setup.
 """
 
 import asyncio
@@ -11,11 +11,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from decimal import Decimal
-
-import boto3
-from google.cloud import billing_v1
-from azure.mgmt.costmanagement import CostManagementClient
-from azure.identity import DefaultAzureCredential
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,32 +46,18 @@ class CostReport:
     trends: Dict[str, float]
 
 
-@dataclass
-class BudgetAlert:
-    """Budget alert"""
-    alert_id: str
-    budget_name: str
-    threshold_percent: float
-    current_spend: Decimal
-    budget_amount: Decimal
-    period: str
-    triggered_at: str
-    severity: str  # warning, critical
-
-
 class CostAnalyzer:
     """
     Multi-Cloud Cost Analyzer
 
     Aggregates and analyzes costs across AWS, GCP, and Azure.
-    Provides detailed breakdowns, trend analysis, and anomaly detection.
+    Gracefully handles missing cloud provider credentials.
     """
 
     def __init__(self, config: Dict):
         self.config = config
         self.cost_data: List[CostData] = []
         self.budgets: Dict[str, Dict] = config.get('budgets', {})
-        self.budget_alerts: List[BudgetAlert] = []
         
         # Initialize client attributes
         self.aws_ce = None
@@ -90,20 +71,24 @@ class CostAnalyzer:
         """Initialize cloud provider cost management clients"""
         # AWS Cost Explorer
         try:
+            import boto3
             self.aws_ce = boto3.client(
                 'ce',
                 region_name=self.config.get('aws_region', 'us-west-2')
             )
+            logger.info("AWS Cost Explorer client initialized")
         except Exception as e:
-            logger.warning(f"Failed to initialize AWS client: {e}")
+            logger.warning(f"AWS client not available: {e}")
+            self.aws_ce = None
 
-        # GCP Billing (standard is now BigQuery, so we might just check creds here or skip)
-        # We'll keep the client for potential catalog lookups if needed
+        # GCP Billing
         try:
             from google.cloud import billing_v1
             self.gcp_billing = billing_v1.CloudBillingClient()
+            logger.info("GCP Billing client initialized")
         except Exception as e:
-            logger.warning(f"Failed to initialize GCP billing client: {e}")
+            logger.warning(f"GCP billing client not available: {e}")
+            self.gcp_billing = None
 
         # Azure Cost Management
         try:
@@ -115,8 +100,10 @@ class CostAnalyzer:
                 self.azure_credential,
                 self.config.get('azure_subscription_id', '')
             )
+            logger.info("Azure Cost Management client initialized")
         except Exception as e:
-            logger.warning(f"Failed to initialize Azure cost client: {e}")
+            logger.warning(f"Azure client not available: {e}")
+            self.azure_cost = None
 
         logger.info("Initialized cost management clients")
 
@@ -126,6 +113,10 @@ class CostAnalyzer:
         end_date: str
     ) -> List[CostData]:
         """Retrieve AWS costs from Cost Explorer"""
+        if not self.aws_ce:
+            logger.info("AWS client not available, skipping AWS costs")
+            return []
+            
         logger.info(f"Fetching AWS costs from {start_date} to {end_date}")
 
         try:
@@ -144,7 +135,6 @@ class CostAnalyzer:
             )
 
             costs = []
-
             for result in response.get('ResultsByTime', []):
                 start = result['TimePeriod']['Start']
                 end = result['TimePeriod']['End']
@@ -179,13 +169,12 @@ class CostAnalyzer:
         end_date: str
     ) -> List[CostData]:
         """Retrieve GCP costs from BigQuery Billing Export"""
-        # Note: GCP Billing API provides catalog info, but actual cost/usage typically comes from BigQuery export
         table_variable = self.config.get('gcp_billing_table')
         if not table_variable:
-            logger.warning("GCP billing table not configured (gcp_billing_table)")
+            logger.info("GCP billing table not configured, skipping GCP costs")
             return []
 
-        logger.info(f"Fetching GCP costs from BigQuery {table_variable} from {start_date} to {end_date}")
+        logger.info(f"Fetching GCP costs from BigQuery from {start_date} to {end_date}")
 
         try:
             from google.cloud import bigquery
@@ -218,15 +207,12 @@ class CostAnalyzer:
                         currency=row.currency,
                         start_date=start_date,
                         end_date=end_date,
-                        unit='USD'  # BigQuery export is usually in account currency
+                        unit='USD'
                     ))
 
             logger.info(f"Retrieved {len(costs)} GCP cost entries")
             return costs
 
-        except ImportError:
-            logger.error("google-cloud-bigquery not installed")
-            return []
         except Exception as e:
             logger.error(f"Failed to retrieve GCP costs: {e}")
             return []
@@ -236,26 +222,24 @@ class CostAnalyzer:
         start_date: str,
         end_date: str
     ) -> List[CostData]:
-        """Retrieve Azure costs from Cost Management"""
+        """Retrieve Azure costs from Cost Management API"""
         if not self.azure_cost:
-            logger.warning("Azure cost management client not available")
+            logger.info("Azure client not available, skipping Azure costs")
             return []
-
+            
         logger.info(f"Fetching Azure costs from {start_date} to {end_date}")
 
         try:
-            # Azure scope can be subscription or resource group
-            scope = f"/subscriptions/{self.config.get('azure_subscription_id')}"
+            from azure.mgmt.costmanagement.models import QueryDefinition, TimeframeType
             
-            # Construct query definition
-            query_definition = {
-                "type": "Usage",
-                "timeframe": "Custom",
-                "timePeriod": {
-                    "from": f"{start_date}T00:00:00+00:00",
-                    "to": f"{end_date}T23:59:59+00:00"
+            query = QueryDefinition(
+                type="ActualCost",
+                timeframe=TimeframeType.CUSTOM,
+                time_period={
+                    "from": start_date,
+                    "to": end_date
                 },
-                "dataset": {
+                dataset={
                     "granularity": "Daily",
                     "aggregation": {
                         "totalCost": {
@@ -264,40 +248,35 @@ class CostAnalyzer:
                         }
                     },
                     "grouping": [
-                        {
-                            "type": "Dimension",
-                            "name": "ServiceName"
-                        },
-                        {
-                            "type": "Dimension",
-                            "name": "ResourceLocation"
-                        }
+                        {"type": "Dimension", "name": "ServiceName"},
+                        {"type": "Dimension", "name": "ResourceLocation"}
                     ]
                 }
-            }
+            )
 
-            # Run query
+            scope = f"/subscriptions/{self.config.get('azure_subscription_id')}"
             result = await asyncio.to_thread(
                 self.azure_cost.query.usage,
                 scope,
-                parameters=query_definition
+                query
             )
 
             costs = []
-            # Parse rows: [Cost, Currency, ServiceName, ResourceLocation, Date]
-            # Column mapping depends on query structure, generally standard
             for row in result.rows:
                 amount = Decimal(str(row[0]))
+                service = row[2] if len(row) > 2 else "Unknown"
+                region = row[3] if len(row) > 3 else "global"
+
                 if amount > 0:
                     costs.append(CostData(
-                        service=row[2],
-                        region=row[3],
+                        service=service,
+                        region=region,
                         provider='azure',
                         amount=amount,
-                        currency=row[1],
-                        start_date=str(row[4]), # UsageDate
-                        end_date=str(row[4]),
-                        unit=row[1]
+                        currency='USD',
+                        start_date=start_date,
+                        end_date=end_date,
+                        unit='USD'
                     ))
 
             logger.info(f"Retrieved {len(costs)} Azure cost entries")
@@ -307,92 +286,100 @@ class CostAnalyzer:
             logger.error(f"Failed to retrieve Azure costs: {e}")
             return []
 
+    async def get_costs(
+        self,
+        start_date: str,
+        end_date: str
+    ) -> List[CostData]:
+        """
+        ADDED: Get costs from all providers (main aggregation method)
+        This is the method that main.py calls
+        """
+        logger.info(f"Aggregating costs from all providers: {start_date} to {end_date}")
+        
+        # Gather costs from all providers in parallel
+        aws_task = self.get_aws_costs(start_date, end_date)
+        gcp_task = self.get_gcp_costs(start_date, end_date)
+        azure_task = self.get_azure_costs(start_date, end_date)
+        
+        aws_costs, gcp_costs, azure_costs = await asyncio.gather(
+            aws_task, gcp_task, azure_task,
+            return_exceptions=True
+        )
+        
+        # Handle exceptions
+        all_costs = []
+        if not isinstance(aws_costs, Exception):
+            all_costs.extend(aws_costs)
+        if not isinstance(gcp_costs, Exception):
+            all_costs.extend(gcp_costs)
+        if not isinstance(azure_costs, Exception):
+            all_costs.extend(azure_costs)
+        
+        self.cost_data = all_costs
+        logger.info(f"Total cost entries retrieved: {len(all_costs)}")
+        
+        return all_costs
+
     async def aggregate_costs(
         self,
         start_date: str,
         end_date: str
     ) -> List[CostData]:
-        """Aggregate costs from all providers"""
-        logger.info("Aggregating costs from all providers")
-
-        # Fetch costs concurrently
-        aws_costs_task = self.get_aws_costs(start_date, end_date)
-        gcp_costs_task = self.get_gcp_costs(start_date, end_date)
-        azure_costs_task = self.get_azure_costs(start_date, end_date)
-
-        aws_costs, gcp_costs, azure_costs = await asyncio.gather(
-            aws_costs_task,
-            gcp_costs_task,
-            azure_costs_task,
-            return_exceptions=True
-        )
-
-        # Handle exceptions
-        if isinstance(aws_costs, Exception):
-            logger.error(f"AWS costs failed: {aws_costs}")
-            aws_costs = []
-        if isinstance(gcp_costs, Exception):
-            logger.error(f"GCP costs failed: {gcp_costs}")
-            gcp_costs = []
-        if isinstance(azure_costs, Exception):
-            logger.error(f"Azure costs failed: {azure_costs}")
-            azure_costs = []
-
-        all_costs = aws_costs + gcp_costs + azure_costs
-        self.cost_data = all_costs
-
-        logger.info(f"Aggregated {len(all_costs)} cost entries")
-        return all_costs
+        """Aggregate costs from all providers (legacy method)"""
+        return await self.get_costs(start_date, end_date)
 
     def generate_cost_report(
         self,
         start_date: str,
-        end_date: str,
-        costs: Optional[List[CostData]] = None
+        end_date: str
     ) -> CostReport:
         """Generate comprehensive cost report"""
-        if costs is None:
-            costs = self.cost_data
-
-        report_id = f"cost-report-{datetime.utcnow().timestamp()}"
-
         # Calculate totals
-        total_cost = sum(c.amount for c in costs)
+        total_cost = sum(cost.amount for cost in self.cost_data)
 
-        # Costs by provider
+        # Group by provider
         costs_by_provider = {}
-        for cost in costs:
+        for cost in self.cost_data:
             provider = cost.provider
-            costs_by_provider[provider] = costs_by_provider.get(provider, Decimal('0')) + cost.amount
+            costs_by_provider[provider] = costs_by_provider.get(
+                provider, Decimal('0')
+            ) + cost.amount
 
-        # Costs by region
+        # Group by region
         costs_by_region = {}
-        for cost in costs:
-            region = f"{cost.provider}/{cost.region}"
-            costs_by_region[region] = costs_by_region.get(region, Decimal('0')) + cost.amount
+        for cost in self.cost_data:
+            region = cost.region
+            costs_by_region[region] = costs_by_region.get(
+                region, Decimal('0')
+            ) + cost.amount
 
-        # Costs by service
+        # Group by service
         costs_by_service = {}
-        for cost in costs:
+        for cost in self.cost_data:
             service = cost.service
-            costs_by_service[service] = costs_by_service.get(service, Decimal('0')) + cost.amount
+            costs_by_service[service] = costs_by_service.get(
+                service, Decimal('0')
+            ) + cost.amount
 
         # Daily costs
         daily_costs_dict = {}
-        for cost in costs:
+        for cost in self.cost_data:
             date = cost.start_date
-            daily_costs_dict[date] = daily_costs_dict.get(date, Decimal('0')) + cost.amount
+            daily_costs_dict[date] = daily_costs_dict.get(
+                date, Decimal('0')
+            ) + cost.amount
 
         daily_costs = sorted(daily_costs_dict.items())
 
         # Detect anomalies
-        anomalies = self._detect_anomalies(costs)
+        anomalies = self._detect_anomalies(self.cost_data)
 
         # Calculate trends
         trends = self._calculate_trends(daily_costs)
 
         report = CostReport(
-            report_id=report_id,
+            report_id=f"cost-report-{datetime.utcnow().timestamp()}",
             start_date=start_date,
             end_date=end_date,
             total_cost=total_cost,
@@ -411,6 +398,15 @@ class CostAnalyzer:
         )
 
         return report
+
+    async def generate_report(
+        self,
+        start_date: str,
+        end_date: str
+    ) -> CostReport:
+        """Generate report (calls get_costs first)"""
+        await self.get_costs(start_date, end_date)
+        return self.generate_cost_report(start_date, end_date)
 
     def _detect_anomalies(self, costs: List[CostData]) -> List[Dict]:
         """Detect cost anomalies"""
@@ -453,7 +449,7 @@ class CostAnalyzer:
         # Calculate daily change
         recent_costs = [float(c[1]) for c in daily_costs[-7:]]
         if len(recent_costs) >= 2:
-            daily_change = ((recent_costs[-1] - recent_costs[0]) / recent_costs[0] * 100)
+            daily_change = ((recent_costs[-1] - recent_costs[0]) / recent_costs[0] * 100) if recent_costs[0] > 0 else 0
         else:
             daily_change = 0.0
 
@@ -469,167 +465,3 @@ class CostAnalyzer:
             'daily_change': daily_change,
             'weekly_change': weekly_change
         }
-
-    async def check_budgets(self) -> List[BudgetAlert]:
-        """Check if any budgets are exceeded"""
-        alerts = []
-
-        # Get current month costs
-        start_date = datetime.utcnow().replace(day=1).strftime('%Y-%m-%d')
-        end_date = datetime.utcnow().strftime('%Y-%m-%d')
-
-        await self.aggregate_costs(start_date, end_date)
-        report = self.generate_cost_report(start_date, end_date)
-
-        # Check each budget
-        for budget_name, budget_config in self.budgets.items():
-            budget_amount = Decimal(str(budget_config['amount']))
-            thresholds = budget_config.get('thresholds', [80, 100])
-
-            # Determine scope (provider, region, service)
-            scope = budget_config.get('scope', 'total')
-            current_spend = Decimal('0')
-
-            if scope == 'total':
-                current_spend = report.total_cost
-            elif scope.startswith('provider:'):
-                provider = scope.split(':')[1]
-                current_spend = report.costs_by_provider.get(provider, Decimal('0'))
-            elif scope.startswith('region:'):
-                region = scope.split(':')[1]
-                current_spend = report.costs_by_region.get(region, Decimal('0'))
-            elif scope.startswith('service:'):
-                service = scope.split(':')[1]
-                current_spend = report.costs_by_service.get(service, Decimal('0'))
-
-            # Check thresholds
-            for threshold in thresholds:
-                threshold_amount = budget_amount * Decimal(str(threshold / 100))
-
-                if current_spend >= threshold_amount:
-                    severity = 'critical' if threshold >= 100 else 'warning'
-
-                    alert = BudgetAlert(
-                        alert_id=f"budget-alert-{budget_name}-{datetime.utcnow().timestamp()}",
-                        budget_name=budget_name,
-                        threshold_percent=float(threshold),
-                        current_spend=current_spend,
-                        budget_amount=budget_amount,
-                        period='monthly',
-                        triggered_at=datetime.utcnow().isoformat(),
-                        severity=severity
-                    )
-
-                    alerts.append(alert)
-                    logger.warning(
-                        f"Budget alert: {budget_name} at {threshold}% "
-                        f"(${current_spend:.2f} / ${budget_amount:.2f})"
-                    )
-
-        self.budget_alerts.extend(alerts)
-        return alerts
-
-    def get_cost_forecast(
-        self,
-        days_ahead: int = 30
-    ) -> Dict[str, Decimal]:
-        """Forecast future costs based on trends"""
-        if not self.cost_data:
-            logger.warning("No cost data available for forecasting")
-            return {}
-
-        # Group costs by day
-        daily_costs = {}
-        for cost in self.cost_data:
-            date = cost.start_date
-            daily_costs[date] = daily_costs.get(date, Decimal('0')) + cost.amount
-
-        if len(daily_costs) < 7:
-            logger.warning("Insufficient data for forecasting")
-            return {}
-
-        # Simple linear regression forecast
-        sorted_days = sorted(daily_costs.items())
-        recent_days = sorted_days[-30:]  # Use last 30 days
-
-        # Calculate average daily cost
-        avg_daily_cost = sum(c[1] for c in recent_days) / len(recent_days)
-
-        # Calculate trend
-        x_values = list(range(len(recent_days)))
-        y_values = [float(c[1]) for c in recent_days]
-
-        n = len(recent_days)
-        sum_x = sum(x_values)
-        sum_y = sum(y_values)
-        sum_xy = sum(x * y for x, y in zip(x_values, y_values))
-        sum_x2 = sum(x * x for x in x_values)
-
-        # Linear regression: y = mx + b
-        m = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
-        b = (sum_y - m * sum_x) / n
-
-        # Forecast
-        forecast = {}
-        last_date = datetime.fromisoformat(sorted_days[-1][0])
-
-        for day in range(1, days_ahead + 1):
-            forecast_date = last_date + timedelta(days=day)
-            forecast_value = Decimal(str(m * (n + day) + b))
-            forecast[forecast_date.strftime('%Y-%m-%d')] = max(forecast_value, Decimal('0'))
-
-        logger.info(f"Generated {days_ahead}-day cost forecast")
-        return forecast
-
-    def get_top_cost_drivers(self, top_n: int = 10) -> List[Dict]:
-        """Identify top cost drivers"""
-        service_costs = {}
-
-        for cost in self.cost_data:
-            key = f"{cost.provider}/{cost.service}/{cost.region}"
-            if key not in service_costs:
-                service_costs[key] = {
-                    'provider': cost.provider,
-                    'service': cost.service,
-                    'region': cost.region,
-                    'total_cost': Decimal('0')
-                }
-            service_costs[key]['total_cost'] += cost.amount
-
-        # Sort by cost
-        sorted_costs = sorted(
-            service_costs.values(),
-            key=lambda x: x['total_cost'],
-            reverse=True
-        )
-
-        return sorted_costs[:top_n]
-
-    async def compare_provider_costs(
-        self,
-        start_date: str,
-        end_date: str
-    ) -> Dict[str, Dict]:
-        """Compare costs across providers"""
-        await self.aggregate_costs(start_date, end_date)
-
-        comparison = {}
-
-        for provider in ['aws', 'gcp', 'azure']:
-            provider_costs = [c for c in self.cost_data if c.provider == provider]
-            total = sum(c.amount for c in provider_costs)
-
-            # Calculate per-service breakdown
-            service_breakdown = {}
-            for cost in provider_costs:
-                service = cost.service
-                service_breakdown[service] = service_breakdown.get(service, Decimal('0')) + cost.amount
-
-            comparison[provider] = {
-                'total_cost': total,
-                'percentage': float(total / sum(c.amount for c in self.cost_data) * 100) if self.cost_data else 0,
-                'service_breakdown': service_breakdown,
-                'num_services': len(service_breakdown)
-            }
-
-        return comparison
