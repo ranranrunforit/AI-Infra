@@ -26,13 +26,36 @@ logger = logging.getLogger("MultiRegionPlatform")
 def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
     """Load configuration from YAML file or environment"""
     config = {
-        "regions": ["us-west-2", "us-east-1", "eu-west-1"],
-        "primary_region": "us-west-2",
+        # Regions must be dicts with 'name', 'provider', 'endpoint', 'k8s_context'
+        "regions": [
+            {
+                "name": os.getenv("REGION_1_NAME", "us-west-2"),
+                "provider": "aws",
+                "endpoint": os.getenv("REGION_1_ENDPOINT", "localhost"),
+                "k8s_context": os.getenv("REGION_1_K8S_CONTEXT", "local"),
+                "prometheus_url": os.getenv("REGION_1_PROMETHEUS_URL", "http://localhost:9091"),
+            },
+            {
+                "name": os.getenv("REGION_2_NAME", "eu-west-1"),
+                "provider": "gcp",
+                "endpoint": os.getenv("REGION_2_ENDPOINT", "localhost"),
+                "k8s_context": os.getenv("REGION_2_K8S_CONTEXT", "local"),
+                "prometheus_url": os.getenv("REGION_2_PROMETHEUS_URL", "http://localhost:9091"),
+            },
+            {
+                "name": os.getenv("REGION_3_NAME", "ap-south-1"),
+                "provider": "azure",
+                "endpoint": os.getenv("REGION_3_ENDPOINT", "localhost"),
+                "k8s_context": os.getenv("REGION_3_K8S_CONTEXT", "local"),
+                "prometheus_url": os.getenv("REGION_3_PROMETHEUS_URL", "http://localhost:9091"),
+            },
+        ],
+        "primary_region": os.getenv("PRIMARY_REGION", "us-west-2"),
+        "failover_enabled": os.getenv("FAILOVER_ENABLED", "true").lower() == "true",
         "aws_region": os.getenv("AWS_REGION", "us-west-2"),
         "gcp_project_id": os.getenv("GCP_PROJECT_ID", ""),
         "gcp_billing_table": os.getenv("GCP_BILLING_TABLE", ""),
         "azure_subscription_id": os.getenv("AZURE_SUBSCRIPTION_ID", ""),
-        # Add other defaults or load from file
     }
     
     if os.path.exists(config_path):
@@ -90,7 +113,7 @@ async def main():
 
     # Create background tasks
     tasks = [
-        asyncio.create_task(failover_controller.monitor_regions(), name="FailoverMonitor"),
+        asyncio.create_task(failover_controller.continuous_monitoring(), name="FailoverMonitor"),
         asyncio.create_task(model_replicator.continuous_replication(), name="ModelReplication"),
         asyncio.create_task(data_sync.continuous_sync(), name="DataSync"),
         # Cost analyzer periodic report
