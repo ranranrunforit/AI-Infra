@@ -82,7 +82,14 @@ class S3Adapter(CloudStorageAdapter):
     def __init__(self, region: str, bucket: str):
         super().__init__(region, "aws")
         self.bucket = bucket
-        self.session = aioboto3.Session()
+        # Session created lazily to avoid import-time credential checks
+        self._session = None
+
+    @property
+    def session(self):
+        if self._session is None:
+            self._session = aioboto3.Session()
+        return self._session
 
     async def upload(self, source_path: str, destination: str) -> bool:
         async with self.session.client('s3', region_name=self.region) as s3:
@@ -139,8 +146,21 @@ class GCSAdapter(CloudStorageAdapter):
     def __init__(self, region: str, bucket: str):
         super().__init__(region, "gcp")
         self.bucket_name = bucket
-        self.client = gcs_storage.Client()
-        self.bucket = self.client.bucket(bucket)
+        # Lazy init — avoids crashing when GCP credentials are absent
+        self._client = None
+        self._bucket = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            self._client = gcs_storage.Client()
+        return self._client
+
+    @property
+    def bucket(self):
+        if self._bucket is None:
+            self._bucket = self.client.bucket(self.bucket_name)
+        return self._bucket
 
     async def upload(self, source_path: str, destination: str) -> bool:
         try:
@@ -194,8 +214,22 @@ class AzureBlobAdapter(CloudStorageAdapter):
     def __init__(self, region: str, connection_string: str, container: str):
         super().__init__(region, "azure")
         self.container = container
-        self.blob_service = BlobServiceClient.from_connection_string(connection_string)
-        self.container_client = self.blob_service.get_container_client(container)
+        self._connection_string = connection_string
+        # Lazy init — avoids crashing when Azure credentials are absent
+        self._blob_service = None
+        self._container_client = None
+
+    @property
+    def blob_service(self):
+        if self._blob_service is None:
+            self._blob_service = BlobServiceClient.from_connection_string(self._connection_string)
+        return self._blob_service
+
+    @property
+    def container_client(self):
+        if self._container_client is None:
+            self._container_client = self.blob_service.get_container_client(self.container)
+        return self._container_client
 
     async def upload(self, source_path: str, destination: str) -> bool:
         try:
@@ -287,32 +321,38 @@ class ModelReplicator:
             )
 
     def _initialize_adapters(self):
-        """Initialize storage adapters for each region"""
+        """Initialize storage adapters for each region (lazy — no cloud calls made here)"""
         for region_config in self.config.get('regions', []):
-            region_name = region_config['name']
-            provider = region_config['provider']
+            region_name = region_config.get('name', '')
+            provider = region_config.get('provider', '')
 
-            if provider == 'aws':
-                adapter = S3Adapter(
-                    region=region_config['aws_region'],
-                    bucket=region_config['bucket']
-                )
-            elif provider == 'gcp':
-                adapter = GCSAdapter(
-                    region=region_config['gcp_region'],
-                    bucket=region_config['bucket']
-                )
-            elif provider == 'azure':
-                adapter = AzureBlobAdapter(
-                    region=region_config['azure_region'],
-                    connection_string=region_config['connection_string'],
-                    container=region_config['container']
-                )
-            else:
-                raise ValueError(f"Unsupported provider: {provider}")
+            try:
+                if provider == 'aws':
+                    adapter = S3Adapter(
+                        region=region_config.get('aws_region', region_config.get('name', 'us-east-1')),
+                        bucket=region_config.get('bucket', f'ml-platform-models-{region_name}')
+                    )
+                elif provider == 'gcp':
+                    adapter = GCSAdapter(
+                        region=region_config.get('gcp_region', region_config.get('name', 'us-central1')),
+                        bucket=region_config.get('bucket', f'ml-platform-models-{region_name}')
+                    )
+                elif provider == 'azure':
+                    adapter = AzureBlobAdapter(
+                        region=region_config.get('azure_region', region_config.get('name', 'centralindia')),
+                        connection_string=region_config.get('connection_string', ''),
+                        container=region_config.get('container', f'ml-platform-models-{region_name}')
+                    )
+                else:
+                    logger.warning(f"Unsupported provider '{provider}' for region '{region_name}', skipping")
+                    continue
 
-            self.adapters[region_name] = adapter
-            logger.info(f"Initialized {provider} adapter for {region_name}")
+                self.adapters[region_name] = adapter
+                logger.info(f"Registered {provider} adapter for {region_name} (lazy connection)")
+
+            except Exception as e:
+                logger.warning(f"Could not initialize adapter for {region_name}: {e} — skipping")
+
 
     @staticmethod
     async def compute_checksum(file_path: str) -> str:

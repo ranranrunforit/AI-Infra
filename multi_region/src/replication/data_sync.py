@@ -128,34 +128,40 @@ class DataSync:
             )
 
     def _initialize_adapters(self):
-        """Initialize storage adapters for each region"""
+        """Initialize storage adapters for each region (lazy — no cloud calls made here)"""
         from .model_replicator import S3Adapter, GCSAdapter, AzureBlobAdapter
 
         for region_config in self.config.get('regions', []):
-            region_name = region_config['name']
-            provider = region_config['provider']
+            region_name = region_config.get('name', '')
+            provider = region_config.get('provider', '')
 
-            if provider == 'aws':
-                adapter = S3Adapter(
-                    region=region_config['aws_region'],
-                    bucket=region_config['data_bucket']
-                )
-            elif provider == 'gcp':
-                adapter = GCSAdapter(
-                    region=region_config['gcp_region'],
-                    bucket=region_config['data_bucket']
-                )
-            elif provider == 'azure':
-                adapter = AzureBlobAdapter(
-                    region=region_config['azure_region'],
-                    connection_string=region_config['connection_string'],
-                    container=region_config['data_container']
-                )
-            else:
-                raise ValueError(f"Unsupported provider: {provider}")
+            try:
+                if provider == 'aws':
+                    adapter = S3Adapter(
+                        region=region_config.get('aws_region', region_config.get('name', 'us-east-1')),
+                        bucket=region_config.get('data_bucket', f'ml-platform-data-{region_name}')
+                    )
+                elif provider == 'gcp':
+                    adapter = GCSAdapter(
+                        region=region_config.get('gcp_region', region_config.get('name', 'us-central1')),
+                        bucket=region_config.get('data_bucket', f'ml-platform-data-{region_name}')
+                    )
+                elif provider == 'azure':
+                    adapter = AzureBlobAdapter(
+                        region=region_config.get('azure_region', region_config.get('name', 'centralindia')),
+                        connection_string=region_config.get('connection_string', ''),
+                        container=region_config.get('data_container', f'ml-platform-data-{region_name}')
+                    )
+                else:
+                    logger.warning(f"Unsupported provider '{provider}' for region '{region_name}', skipping")
+                    continue
 
-            self.adapters[region_name] = adapter
-            logger.info(f"Initialized adapter for {region_name}")
+                self.adapters[region_name] = adapter
+                logger.info(f"Registered {provider} data adapter for {region_name} (lazy connection)")
+
+            except Exception as e:
+                logger.warning(f"Could not initialize data adapter for {region_name}: {e} — skipping")
+
 
     @staticmethod
     async def compute_checksum(file_path: str) -> str:
