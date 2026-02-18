@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+nameSuffix: -ap-south-1
+
+commonLabels:
+  region: ap-south-1
+  provider: azure
+
+replicas:
+- name: ml-serving
+  count: 3
+
+patches:
+- target:
+    kind: Deployment
+    name: ml-serving
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/env/0/value
+      value: "ap-south-1"
+    - op: replace
+      path: /spec/template/spec/containers/0/env/1/value
+      value: "azure"
+
+resources:
+- hpa.yaml

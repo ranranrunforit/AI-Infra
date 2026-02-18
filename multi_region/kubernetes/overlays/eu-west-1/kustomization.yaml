@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+nameSuffix: -eu-west-1
+
+commonLabels:
+  region: eu-west-1
+  provider: gcp
+
+replicas:
+- name: ml-serving
+  count: 4
+
+patches:
+- target:
+    kind: Deployment
+    name: ml-serving
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/env/0/value
+      value: "eu-west-1"
+    - op: replace
+      path: /spec/template/spec/containers/0/env/1/value
+      value: "gcp"
+
+resources:
+- hpa.yaml
