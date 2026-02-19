@@ -392,6 +392,8 @@ echo "✅ Permissions granted to: $GKE_SA"
 ```bash
 # Deploy the application
 kubectl apply -k kubernetes/base/
+kubectl apply -k kubernetes/overlays/us-west-2/
+kubectl apply -k kubernetes/overlays/eu-west-1/
 
 # Watch pods start
 kubectl get pods -n ml-platform -w
