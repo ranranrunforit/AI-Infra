@@ -12,7 +12,7 @@ commonLabels:
 
 replicas:
 - name: ml-serving
-  count: 4
+  count: 1
 
 patches:
 - target:

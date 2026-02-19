@@ -6,7 +6,7 @@ metadata:
     app: ml-platform
     component: ml-serving
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: ml-platform
@@ -24,7 +24,7 @@ spec:
       serviceAccountName: ml-serving
       containers:
       - name: ml-serving
-        image: ml-platform/ml-serving:latest
+        image: us-central1-docker.pkg.dev/project-1d30c558-3ae4-41a6-907/ml-platform/ml-serving:latest
         ports:
         - containerPort: 8080
           name: http
@@ -34,24 +34,24 @@ spec:
           protocol: TCP
         env:
         - name: REGION
-          value: "REPLACE_ME"
+          value: "us-west-2"
         - name: PROVIDER
-          value: "REPLACE_ME"
+          value: "gcp"
         - name: LOG_LEVEL
           value: "info"
         - name: GCP_PROJECT_ID
-          value: "REPLACE_ME"
+          value: "project-1d30c558-3ae4-41a6-907"
         - name: GCP_BILLING_TABLE
           value: "REPLACE_ME"
         - name: AZURE_SUBSCRIPTION_ID
           value: "REPLACE_ME"
         resources:
           requests:
-            cpu: "1000m"
-            memory: "2Gi"
+            cpu: "250m"
+            memory: "256Mi"
           limits:
-            cpu: "2000m"
-            memory: "4Gi"
+            cpu: "500m"
+            memory: "512Mi"
         livenessProbe:
           httpGet:
             path: /health
