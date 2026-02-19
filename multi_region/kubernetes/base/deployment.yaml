@@ -42,7 +42,7 @@ spec:
         - name: GCP_PROJECT_ID
           value: "project-1d30c558-3ae4-41a6-907"
         - name: GCP_BILLING_TABLE
-          value: "REPLACE_ME"
+          value: "gcp_billing_export_v1_01509D_6774B9_000010_copy"
         - name: AZURE_SUBSCRIPTION_ID
           value: "REPLACE_ME"
         resources:
