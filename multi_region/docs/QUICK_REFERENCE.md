@@ -210,14 +210,3 @@ docker/Dockerfile                  - Container image definition
 
 ---
 
-## 🔐 Important Notes
-
-- Always use full image paths: `us-central1-docker.pkg.dev/PROJECT/REPO/IMAGE:TAG`
-- Default credentials: Grafana (admin/check-secret), Prometheus (no auth)
-- Health endpoint: `/health`, Metrics endpoint: `/metrics`
-- Logs show region health every 10 seconds
-- Metrics collected every 60 seconds
-
----
-
-**Keep this handy for quick reference!** 📌
