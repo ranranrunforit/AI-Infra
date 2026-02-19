@@ -1,6 +1,6 @@
 # Step-by-Step Implementation Guide
 
-## Project 203: Multi-Region ML Platform
+## Project 11: Multi-Region ML Platform
 
 This guide walks through implementing the multi-region ML platform from scratch, explaining key decisions and trade-offs.
 
