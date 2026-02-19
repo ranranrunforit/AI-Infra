@@ -398,6 +398,10 @@ kubectl apply -k kubernetes/overlays/eu-west-1/
 # Watch pods start
 kubectl get pods -n ml-platform -w
 # Press Ctrl+C once all pods show "Running"
+
+# Port-forward to test locally
+kubectl port-forward -n ml-platform svc/ml-platform 8080:8080
+curl http://localhost:8080/health
 ```
 
 **Expected output:**
@@ -466,6 +470,12 @@ kubectl wait --for=condition=ready pod \
 ### Step 2: Expose Grafana and Prometheus
 
 ```bash
+# Access Monitoring
+# Prometheus
+kubectl port-forward -n ml-platform svc/prometheus 9090:9090
+# Grafana (if deployed)
+kubectl port-forward -n monitoring svc/grafana 3000:3000
+
 # Expose Grafana as LoadBalancer
 kubectl patch svc prometheus-grafana -n monitoring \
     -p '{"spec": {"type": "LoadBalancer"}}'
