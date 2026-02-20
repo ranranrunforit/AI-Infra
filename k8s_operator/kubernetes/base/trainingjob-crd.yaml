@@ -119,6 +119,20 @@ spec:
                     masterPort:
                       type: integer
                       default: 29500
+                failurePolicy:
+                  type: object
+                  properties:
+                    restartPolicy:
+                      type: string
+                      enum: [OnFailure, Never]
+                      default: OnFailure
+                    backoffLimit:
+                      type: integer
+                      default: 3
+                      minimum: 0
+                    activeDeadlineSeconds:
+                      type: integer
+                      format: int64
             status:
               type: object
               properties:
@@ -153,6 +167,10 @@ spec:
                 completionTime:
                   type: string
                   format: date-time
+                failureReason:
+                  type: string
+                failureMessage:
+                  type: string
       subresources:
         status: {}
       additionalPrinterColumns:

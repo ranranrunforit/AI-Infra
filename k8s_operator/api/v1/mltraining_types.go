@@ -92,6 +92,10 @@ type TrainingJobSpec struct {
 	// Networking configuration for distributed training
 	// +optional
 	Networking *NetworkingConfig `json:"networking,omitempty"`
+
+	// Failure policy configuration
+	// +optional
+	FailurePolicy *FailurePolicyConfig `json:"failurePolicy,omitempty"`
 }
 
 type CheckpointConfig struct {
@@ -167,6 +171,24 @@ type NetworkingConfig struct {
 	MasterPort int32 `json:"masterPort"`
 }
 
+type FailurePolicyConfig struct {
+	// Restart policy: OnFailure or Never
+	// +kubebuilder:validation:Enum=OnFailure;Never
+	// +kubebuilder:default=OnFailure
+	// +optional
+	RestartPolicy string `json:"restartPolicy,omitempty"`
+
+	// Number of retries before marking the job as failed
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default=3
+	// +optional
+	BackoffLimit int32 `json:"backoffLimit,omitempty"`
+
+	// Maximum time in seconds to allow the job to run
+	// +optional
+	ActiveDeadlineSeconds int64 `json:"activeDeadlineSeconds,omitempty"`
+}
+
 // TrainingJobStatus defines the observed state of TrainingJob
 type TrainingJobStatus struct {
 	// Current state of the training job
@@ -193,6 +215,14 @@ type TrainingJobStatus struct {
 
 	// Time when training completed
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
+
+	// Reason for failure if the job failed
+	// +optional
+	FailureReason string `json:"failureReason,omitempty"`
+
+	// Human-readable message describing the failure
+	// +optional
+	FailureMessage string `json:"failureMessage,omitempty"`
 }
 
 type ResourceStatus struct {

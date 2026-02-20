@@ -144,12 +144,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			// Check failure policy
 			backoffLimit := int32(3)
 			if trainingJob.Spec.FailurePolicy != nil && trainingJob.Spec.FailurePolicy.BackoffLimit != 0 {
-				backoffLimit = int32(trainingJob.Spec.FailurePolicy.BackoffLimit)
+				backoffLimit = trainingJob.Spec.FailurePolicy.BackoffLimit
 			}
 			
 			if foundJob.Status.Failed >= backoffLimit {
 				trainingJob.Status.State = "Failed"
 				trainingJob.Status.FailureReason = "TooManyFailures"
+				trainingJob.Status.FailureMessage = fmt.Sprintf("%d workers failed (backoff limit: %d)", foundJob.Status.Failed, backoffLimit)
 				r.Recorder.Event(trainingJob, corev1.EventTypeWarning, "JobFailed", "Training Job Failed")
 				metrics.JobFailed.WithLabelValues(trainingJob.Namespace, "TooManyFailures").Inc()
 			}
