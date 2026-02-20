@@ -3,7 +3,6 @@ package resources
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	mlv1 "github.com/example/k8s-operator/api/v1"
 	batchv1 "k8s.io/api/batch/v1"
