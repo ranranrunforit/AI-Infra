@@ -182,7 +182,7 @@ Your **TrainingJob Operator Metrics** dashboard is pre-loaded under **Dashboards
 The 2-day debugging journey came down to one issue: **`cmd/main.go` on Cloud Shell was corrupted** — it contained controller code (`package controller`) instead of the entry point (`package main`). This caused `go build` to produce a Go archive file instead of an executable binary, which surfaced as `exec format error` or was masked by `permission denied` depending on which version ran first.
 
 ---
----
+
 
 # Part 2: Production Hardening
 
