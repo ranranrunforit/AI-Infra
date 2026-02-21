@@ -1,0 +1,37 @@
+steps:
+  # Single diagnostic step: compile + verify + build Docker image
+  - name: 'golang:1.22'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        echo "=== ENVIRONMENT ==="
+        go version
+        go env GOARCH GOOS GOPATH GOMOD
+        pwd
+        echo ""
+        echo "=== SOURCE FILES ==="
+        ls -la cmd/
+        echo ""
+        echo "=== PACKAGE DECLARATION ==="
+        head -20 cmd/main.go
+        echo ""
+        echo "=== BUILDING ==="
+        go mod tidy
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -a -o manager ./cmd/
+        echo ""
+        echo "=== BUILD OUTPUT ==="
+        ls -la manager
+        head -c 4 manager | od -A x -t x1z
+        echo "=== DONE ==="
+
+  # Set permissions
+  - name: 'ubuntu'
+    args: ['chmod', '755', 'manager']
+
+  # Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '--no-cache', '-t', '$_IMAGE', '.']
+
+images: ['$_IMAGE']
