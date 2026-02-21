@@ -23,7 +23,7 @@ spec:
             - /manager
           args:
             - --leader-elect
-          image: controller:latest
+          image: us-central1-docker.pkg.dev/my-ml-operator/ml-operators/ml-training-operator:v1.0.0
           name: manager
           securityContext:
             allowPrivilegeEscalation: false
