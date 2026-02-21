@@ -226,7 +226,9 @@ kubectl wait --for=condition=Available deployment --all -n cert-manager --timeou
 
 ## Step 2: Create a Self-Signed Certificate Authority
 
-In production with a real domain, you'd use Let's Encrypt. Without a domain, we use a self-signed CA — same pattern, different issuer:
+In production with a real domain, you'd use Let's Encrypt. Without a domain, we use a self-signed CA — same pattern, different issuer.
+
+This takes three resources: a bootstrap `ClusterIssuer` (self-signed, just to get started), a `Certificate` that becomes our own CA, and a namespaced `Issuer` that uses that CA to sign actual TLS certificates. Each one builds on the previous.
 
 ```bash
 cat <<'EOF' | kubectl apply -f -
@@ -429,6 +431,7 @@ grafana:
       label: grafana_dashboard
 EOF
 
+# Apply the new config — --reuse-values preserves your existing Prometheus settings
 helm upgrade monitoring prometheus-community/kube-prometheus-stack \
   --namespace monitoring --reuse-values -f /tmp/grafana-hardened.yaml
 kubectl rollout status deployment/monitoring-grafana -n monitoring
@@ -438,7 +441,7 @@ kubectl rollout status deployment/monitoring-grafana -n monitoring
 
 ## Step 6: Network Policy (Restrict Pod Access)
 
-Only allow Ingress traffic and Prometheus to reach Grafana:
+Only allow Ingress traffic and Prometheus to reach Grafana. Note that the first rule (for the load balancer) has no `from:` selector — that's intentional. GKE's L7 load balancer runs at the node level and can't be targeted by pod labels, so you can only restrict it by port:
 
 ```bash
 cat <<'EOF' | kubectl apply -f -
