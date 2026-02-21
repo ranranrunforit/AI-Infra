@@ -212,7 +212,10 @@ func (b *JobBuilder) buildVolumeMounts(instance *mlv1.TrainingJob) []corev1.Volu
 		},
 	}
 
-	if instance.Spec.Checkpoint != nil && instance.Spec.Checkpoint.Enabled {
+	// Only mount checkpoints volume if storage is explicitly configured as pvc
+	// (must match the condition in buildVolumes)
+	if instance.Spec.Checkpoint != nil && instance.Spec.Checkpoint.Enabled &&
+		instance.Spec.Checkpoint.Storage != nil && instance.Spec.Checkpoint.Storage.Type == "pvc" {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      "checkpoints",
 			MountPath: "/checkpoints",
