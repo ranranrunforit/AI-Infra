@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trainingjob-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  trainingjob-dashboard.json: |
+    {
+      "annotations": {"list": [{"builtIn": 1,"datasource": "-- Grafana --","enable": true,"hide": true,"iconColor": "rgba(0, 211, 255, 1)","name": "Annotations & Alerts","type": "dashboard"}]},
+      "editable": true,
+      "panels": [
+        {"datasource": "Prometheus","fieldConfig": {"defaults": {"color": {"mode": "palette-classic"},"custom": {"drawStyle": "line","fillOpacity": 10,"lineWidth": 1,"showPoints": "auto"}},"overrides": []},"gridPos": {"h": 8,"w": 12,"x": 0,"y": 0},"id": 2,
+          "targets": [{"expr": "sum(trainingjob_created_total) by (namespace)","legendFormat": "{{namespace}}","refId": "A"}],
+          "title": "Total Jobs Created","type": "timeseries"},
+        {"datasource": "Prometheus","fieldConfig": {"defaults": {"color": {"mode": "palette-classic"},"custom": {"drawStyle": "line","fillOpacity": 10,"lineWidth": 1,"showPoints": "auto"}},"overrides": []},"gridPos": {"h": 8,"w": 12,"x": 12,"y": 0},"id": 3,
+          "targets": [{"expr": "sum(trainingjob_active_workers) by (training_job)","legendFormat": "{{training_job}}","refId": "A"}],
+          "title": "Active Workers","type": "timeseries"},
+        {"datasource": "Prometheus","fieldConfig": {"defaults": {"color": {"mode": "palette-classic"},"custom": {"drawStyle": "line","fillOpacity": 10,"lineWidth": 1,"showPoints": "auto"}},"overrides": []},"gridPos": {"h": 8,"w": 12,"x": 0,"y": 8},"id": 4,
+          "targets": [{"expr": "sum(trainingjob_allocated_gpus) by (training_job)","legendFormat": "{{training_job}}","refId": "A"}],
+          "title": "Allocated GPUs","type": "timeseries"},
+        {"datasource": "Prometheus","fieldConfig": {"defaults": {"color": {"mode": "palette-classic"},"custom": {"drawStyle": "line","fillOpacity": 10,"lineWidth": 1,"showPoints": "auto"}},"overrides": []},"gridPos": {"h": 8,"w": 12,"x": 12,"y": 8},"id": 5,
+          "targets": [{"expr": "sum(trainingjob_failed_total) by (reason)","legendFormat": "{{reason}}","refId": "A"}],
+          "title": "Failed Jobs by Reason","type": "timeseries"}
+      ],
+      "schemaVersion": 30,
+      "style": "dark",
+      "title": "TrainingJob Operator Metrics",
+      "uid": "trainingjob-dashboard",
+      "version": 1
+    }
