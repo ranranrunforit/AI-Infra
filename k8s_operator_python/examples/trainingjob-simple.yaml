@@ -1,0 +1,19 @@
+apiVersion: ml.example.com/v1
+kind: TrainingJob
+metadata:
+  name: resnet-simple
+  namespace: ml-training
+spec:
+  model: resnet50
+  dataset: imagenet
+  numWorkers: 2
+  gpusPerWorker: 1
+  framework: pytorch
+  hyperparameters:
+    learningRate: 0.001
+    batchSize: 32
+    epochs: 10
+    optimizer: adam
+  checkpoint:
+    enabled: true
+    frequency: 2
