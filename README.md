@@ -48,3 +48,7 @@ Terraform, Route53, AWS EKS, GCP GKE, Azure AKS, Prometheus, Grafana
 **[Kubernetes Operator for ML Training Jobs](./k8s_operator)**
 
 Go, TrainingJob CRD, Kopf, PVC, S3, GCS, NFS
+
+**[LLM Platform with RAG](./llm-rag-platform)**
+
+
