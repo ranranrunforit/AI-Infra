@@ -111,7 +111,7 @@ output "cloud_run_url" {
 
 output "qdrant_internal_ip" {
   description = "Qdrant VM internal IP (if deployed)"
-  value       = var.enable_qdrant_vm ? google_compute_instance.qdrant[0].network_interface[0].network_ip : "N/A"
+  value       = var.enable_qdrant_vm ? try(google_compute_instance.qdrant[0].network_interface[0].network_ip, "N/A") : "N/A"
 }
 
 output "artifact_registry_repo" {

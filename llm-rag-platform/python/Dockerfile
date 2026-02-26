@@ -29,8 +29,10 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
 WORKDIR /app
 
 # Install runtime-only system deps
+# curl is required for the HEALTHCHECK command
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python packages from builder

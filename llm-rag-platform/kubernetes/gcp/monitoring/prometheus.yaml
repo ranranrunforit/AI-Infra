@@ -1,0 +1,278 @@
+---
+# Prometheus Stack - GKE Deployment
+# Project 303: Enterprise LLM Platform with RAG
+#
+# Wires up to:
+#   - /metrics on rag-api pods (port 8080)   → ServiceMonitor
+#   - /metrics on qdrant pods (port 6333)    → ServiceMonitor
+#   - monitoring/prometheus/llm-rules.yaml   → loaded as ConfigMap
+#
+# Apply: kubectl apply -f kubernetes/gcp/monitoring/prometheus.yaml
+
+# ── Monitoring namespace ──────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    project: project-303-llm-rag
+
+---
+# ── RBAC: allow Prometheus to scrape across namespaces ───────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-sa
+  namespace: monitoring
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-cluster-role
+rules:
+- apiGroups: [""]
+  resources: [nodes, nodes/metrics, services, endpoints, pods]
+  verbs: [get, list, watch]
+- apiGroups: [""]
+  resources: [configmaps]
+  verbs: [get]
+- nonResourceURLs: [/metrics, /metrics/cadvisor]
+  verbs: [get]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: prometheus-sa
+  namespace: monitoring
+
+---
+# ── LLM Rules ConfigMap (from existing monitoring/prometheus/llm-rules.yaml) ─
+# Apply the existing rules file as a ConfigMap before creating this stack:
+#
+#   kubectl create configmap llm-prometheus-rules \
+#     --from-file=llm-rules.yaml=monitoring/prometheus/llm-rules.yaml \
+#     -n monitoring
+#
+# Or managed here via kustomize / helm values.
+# The ConfigMap is mounted into Prometheus at /etc/prometheus/rules/
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: rag-platform-gke
+        environment: production
+
+    rule_files:
+      - /etc/prometheus/rules/*.yaml
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: []   # Add alertmanager here when ready
+
+    scrape_configs:
+      # ── RAG API pods (auto-discovered via annotations) ───────────────────
+      - job_name: rag-api
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [llm-inference]
+        relabel_configs:
+          # Only scrape pods with prometheus.io/scrape: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+      # ── Qdrant vector database ────────────────────────────────────────────
+      - job_name: qdrant
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [llm-inference]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: qdrant
+          - source_labels: [__address__]
+            action: replace
+            regex: ([^:]+)(?::\d+)?
+            replacement: $1:6333
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+      # ── Kubernetes node metrics ───────────────────────────────────────────
+      - job_name: kubernetes-nodes
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      # ── Prometheus itself ─────────────────────────────────────────────────
+      - job_name: prometheus
+        static_configs:
+          - targets: [localhost:9090]
+
+---
+# ── Prometheus Persistent Storage ────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: monitoring
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard-rwo
+
+---
+# ── Prometheus Deployment ─────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus-sa
+
+      # Run as non-root (GKE security best practice)
+      securityContext:
+        runAsUser: 65534   # nobody
+        fsGroup: 65534
+
+      initContainers:
+      # Copy the LLM rules ConfigMap into the rules directory
+      - name: copy-llm-rules
+        image: busybox:1.36
+        command: [sh, -c, "cp /mnt/rules-src/*.yaml /mnt/rules/"]
+        volumeMounts:
+        - name: llm-rules-src
+          mountPath: /mnt/rules-src
+        - name: prometheus-rules
+          mountPath: /mnt/rules
+
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.51.0
+        args:
+          - "--config.file=/etc/prometheus/prometheus.yml"
+          - "--storage.tsdb.path=/prometheus"
+          - "--storage.tsdb.retention.time=15d"   # Keep 15 days of metrics
+          - "--web.enable-lifecycle"                # Allow hot reload
+          - "--web.enable-admin-api"
+
+        ports:
+        - name: http
+          containerPort: 9090
+
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+        - name: prometheus-rules
+          mountPath: /etc/prometheus/rules
+        - name: prometheus-storage
+          mountPath: /prometheus
+
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 15
+
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+      - name: llm-rules-src
+        configMap:
+          name: llm-prometheus-rules        # Created from llm-rules.yaml
+          optional: true                    # Don't fail if not yet created
+      - name: prometheus-rules
+        emptyDir: {}
+      - name: prometheus-storage
+        persistentVolumeClaim:
+          claimName: prometheus-pvc
+
+---
+# ── Prometheus Service (ClusterIP, accessed by Grafana) ───────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+  - name: http
+    port: 9090
+    targetPort: 9090

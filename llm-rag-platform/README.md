@@ -1,4 +1,4 @@
-# Project 13: LLM Platform with RAG
+# Project 303: LLM Platform with RAG - Reference Implementation
 
 This directory contains production-ready reference implementations for deploying an enterprise LLM platform with RAG capabilities.
 
@@ -309,7 +309,26 @@ locust -f tests/load/locustfile.py --host=http://localhost:8000
 - [../governance/llm-governance-framework.md](../governance/llm-governance-framework.md) - Governance policies
 - [../runbooks/](../runbooks/) - Operational runbooks
 
+## 🤝 Contributing
 
+1. Follow the code style (black, isort, mypy)
+2. Add tests for new features
+3. Update documentation
+4. Submit PR with clear description
+
+## 📝 License
+
+Internal use only - Company Confidential
+
+## 🐛 Troubleshooting
+
+See [../runbooks/troubleshooting-guide.md](../runbooks/troubleshooting-guide.md) for common issues and solutions.
+
+## 📧 Support
+
+- Slack: #llm-platform
+- Email: llm-platform@company.com
+- Oncall: PagerDuty rotation
 
 ---
 

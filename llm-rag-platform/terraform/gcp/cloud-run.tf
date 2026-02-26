@@ -103,8 +103,10 @@ resource "google_cloud_run_v2_service" "rag_api" {
       }
 
       env {
-        name  = "QDRANT_HOST"
-        value = var.enable_qdrant_vm ? google_compute_instance.qdrant[0].network_interface[0].network_ip : "localhost"
+        name = "QDRANT_HOST"
+        # try() guards against plan-time error when enable_qdrant_vm=false (count=0)
+        # When no VM: use ":memory:" — qdrant-client in-memory mode, no server needed
+        value = var.enable_qdrant_vm ? try(google_compute_instance.qdrant[0].network_interface[0].network_ip, "localhost") : ":memory:"
       }
 
       env {

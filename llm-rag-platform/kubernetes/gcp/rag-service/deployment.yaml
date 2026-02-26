@@ -1,0 +1,266 @@
+---
+# RAG API Service - GKE Deployment
+# Project 303: Enterprise LLM Platform with RAG
+#
+# Full stack on GKE: Qdrant + RAG API + Ingress
+# Apply: kubectl apply -f kubernetes/gcp/rag-service/deployment.yaml
+
+# ── Namespace ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-inference
+  labels:
+    project: project-303-llm-rag
+
+---
+# ── ConfigMap (non-secret config) ─────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-api-config
+  namespace: llm-inference
+data:
+  LLM_BACKEND: "gemini"
+  GEMINI_MODEL: "gemini-2.0-flash"
+  EMBEDDING_MODEL: "BAAI/bge-small-en-v1.5"
+  QDRANT_HOST: "qdrant-service"      # Internal K8s service name
+  QDRANT_PORT: "6333"
+  COLLECTION_NAME: "enterprise_knowledge"
+  ENABLE_RERANKING: "true"
+  ENABLE_PII_DETECTION: "true"
+  ENABLE_CONTENT_MODERATION: "false"
+  RATE_LIMIT_RPM: "60"
+  CORS_ORIGINS: "*"
+  PORT: "8080"
+  ENV: "production"
+
+---
+# ── Secret (API keys - you must populate this) ────────────────────────────────
+# Run once before applying:
+#   kubectl create secret generic rag-api-secrets \
+#     --from-literal=GOOGLE_API_KEY=<your-gemini-key> \
+#     --from-literal=API_KEY=$(openssl rand -base64 32) \
+#     -n llm-inference
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rag-api-secrets
+  namespace: llm-inference
+type: Opaque
+# stringData:   <-- DO NOT hardcode here; use kubectl create secret above
+#   GOOGLE_API_KEY: ""
+#   API_KEY: ""
+
+---
+# ── Service Account ───────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rag-api-sa
+  namespace: llm-inference
+  annotations:
+    # Workload Identity: link to GCP Service Account for GCS / Secret Manager access
+    iam.gke.io/gcp-service-account: rag-api-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
+
+---
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-api
+  namespace: llm-inference
+  labels:
+    app: rag-api
+    component: api-server
+    version: "1.0.0"
+spec:
+  replicas: 2       # 2 replicas for HA
+  selector:
+    matchLabels:
+      app: rag-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0    # Zero downtime deploys
+  template:
+    metadata:
+      labels:
+        app: rag-api
+        component: api-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: rag-api-sa
+
+      # Embed model is downloaded at build time into the image.
+      # First startup takes ~60s while FastAPI loads sentence-transformers.
+      initContainers: []
+
+      containers:
+      - name: rag-api
+        # Replace with your Artifact Registry image after building:
+        #   docker build -t us-central1-docker.pkg.dev/YOUR_PROJECT/rag-platform/rag-api:latest python/
+        #   docker push us-central1-docker.pkg.dev/YOUR_PROJECT/rag-platform/rag-api:latest
+        image: us-central1-docker.pkg.dev/YOUR_PROJECT_ID/rag-platform/rag-api:latest
+        imagePullPolicy: Always
+
+        ports:
+        - name: http
+          containerPort: 8080
+
+        # Load non-secret config from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: rag-api-config
+
+        # Load secrets
+        env:
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rag-api-secrets
+              key: GOOGLE_API_KEY
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rag-api-secrets
+              key: API_KEY
+
+        resources:
+          requests:
+            cpu: "1000m"      # 1 vCPU per pod
+            memory: "2Gi"     # bge-small needs ~500MB, plus FastAPI overhead
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+
+        # Startup probe: wait for model to load (~60s)
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 12    # 2 minutes total
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          periodSeconds: 30
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        # Model cache on ephemeral storage
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/.cache
+
+      volumes:
+      - name: model-cache
+        emptyDir:
+          sizeLimit: 2Gi    # Enough for bge-small (~500MB) + reranker (~400MB)
+
+---
+# ── Service (ClusterIP - accessible within cluster) ───────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-api-service
+  namespace: llm-inference
+  labels:
+    app: rag-api
+spec:
+  type: ClusterIP
+  selector:
+    app: rag-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+
+---
+# ── HorizontalPodAutoscaler ───────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rag-api-hpa
+  namespace: llm-inference
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rag-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# ── Ingress (GKE Managed Load Balancer with HTTPS) ────────────────────────────
+# Requires: gke-ingress-class annotation + a static IP + managed cert
+#
+# First create static IP:
+#   gcloud compute addresses create rag-api-ip --global
+#   gcloud compute addresses describe rag-api-ip --global  # note the IP
+#
+# Create managed SSL cert (replace YOUR_DOMAIN):
+#   gcloud compute ssl-certificates create rag-api-cert \
+#     --domains=api.YOUR_DOMAIN.com --global
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rag-api-ingress
+  namespace: llm-inference
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "rag-api-ip"  # static IP name
+    networking.gke.io/managed-certificates: "rag-api-cert"     # managed TLS cert
+    kubernetes.io/ingress.allow-http: "false"                   # HTTPS only
+spec:
+  rules:
+  - host: api.YOUR_DOMAIN.com     # Replace with your domain (or use raw IP)
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: rag-api-service
+            port:
+              number: 80
+
+---
+# ── PodDisruptionBudget (matches original vLLM PDB pattern) ──────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rag-api-pdb
+  namespace: llm-inference
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: rag-api
