@@ -1,0 +1,102 @@
+# =============================================================================
+# Docker Compose - Local Development & Testing
+# Project 303: Enterprise LLM RAG Platform
+#
+# Usage:
+#   cp python/.env.example python/.env    # Fill in GOOGLE_API_KEY
+#   docker compose up --build
+#
+#   Test:
+#   curl -X POST http://localhost:8080/v1/chat \
+#     -H "Content-Type: application/json" \
+#     -d '{"query": "What is machine learning?", "user_id": "test"}'
+# =============================================================================
+
+version: "3.9"
+
+services:
+  # ── Qdrant Vector Database ────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── RAG API Service ───────────────────────────────────────────────────────
+  rag-api:
+    build:
+      context: ./python
+      dockerfile: Dockerfile
+      target: production
+    container_name: rag-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./python/.env
+    environment:
+      # Override Qdrant host to use Docker network name
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      PORT: "8080"
+      ENV: development
+      # These come from .env file:
+      # GOOGLE_API_KEY, GEMINI_MODEL, LLM_BACKEND, etc.
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ── Prometheus (optional monitoring) ─────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/docker-prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/llm-rules.yaml:/etc/prometheus/rules/llm-rules.yaml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    profiles:
+      - monitoring   # Only start with: docker compose --profile monitoring up
+
+  # ── Grafana (optional dashboards) ────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+volumes:
+  qdrant_data:
+    driver: local
+  grafana_data:
+    driver: local

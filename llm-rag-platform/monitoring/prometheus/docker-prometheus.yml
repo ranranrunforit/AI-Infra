@@ -1,0 +1,29 @@
+# Prometheus config for Docker Compose local development
+# Used by docker-compose.yml monitoring profile
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/llm-rules.yaml
+
+scrape_configs:
+  # RAG API service metrics
+  - job_name: "rag-api"
+    static_configs:
+      - targets: ["rag-api:8080"]
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+
+  # Qdrant vector database
+  - job_name: "qdrant"
+    static_configs:
+      - targets: ["qdrant:6333"]
+    metrics_path: "/metrics"
+    scrape_interval: 30s
+
+  # Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

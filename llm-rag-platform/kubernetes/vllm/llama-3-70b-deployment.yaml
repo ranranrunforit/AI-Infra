@@ -1,0 +1,355 @@
+---
+# vLLM Deployment for Llama 3 70B
+# Requires 8x A100 40GB GPUs per replica
+# Uses PagedAttention and continuous batching for 10x throughput
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama-3-70b
+  namespace: llm-inference
+  labels:
+    app: vllm
+    model: llama-3-70b
+    workload: llm-inference
+spec:
+  replicas: 2  # 2 replicas for HA (16 GPUs total)
+  selector:
+    matchLabels:
+      app: vllm
+      model: llama-3-70b
+  template:
+    metadata:
+      labels:
+        app: vllm
+        model: llama-3-70b
+        workload: llm-inference
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Schedule on A100 nodes only
+      nodeSelector:
+        gpu-type: a100
+        workload-type: llm-inference
+
+      # Tolerate GPU taints
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+
+      # Pod anti-affinity for HA
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - vllm
+                - key: model
+                  operator: In
+                  values:
+                  - llama-3-70b
+              topologyKey: kubernetes.io/hostname
+
+      # Init container to download model from S3
+      initContainers:
+      - name: model-downloader
+        image: amazon/aws-cli:2.13.0
+        command:
+        - sh
+        - -c
+        - |
+          echo "Downloading Llama 3 70B model from S3..."
+          aws s3 sync s3://$MODEL_BUCKET/llama-3-70b /models/llama-3-70b
+          echo "Model download complete"
+        env:
+        - name: MODEL_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: llm-config
+              key: model_bucket
+        - name: AWS_REGION
+          value: us-west-2
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+
+      containers:
+      - name: vllm-server
+        image: vllm/vllm-openai:v0.3.0
+        imagePullPolicy: Always
+
+        command:
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        - --model
+        - /models/llama-3-70b
+        - --tensor-parallel-size
+        - "8"  # 8 GPUs for tensor parallelism
+        - --max-num-batched-tokens
+        - "16384"  # Batch size for throughput
+        - --max-num-seqs
+        - "256"  # Max concurrent sequences
+        - --trust-remote-code
+        - --dtype
+        - bfloat16  # Mixed precision for performance
+        - --disable-log-requests
+        - --enable-prefix-caching  # Cache common prefixes
+        - --gpu-memory-utilization
+        - "0.95"  # Use 95% of GPU memory
+        - --max-model-len
+        - "4096"  # Max context length
+        - --port
+        - "8000"
+
+        env:
+        # Performance optimizations
+        - name: VLLM_USE_MODELSCOPE
+          value: "False"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0,1,2,3,4,5,6,7"
+        - name: NCCL_DEBUG
+          value: "WARN"
+        - name: NCCL_P2P_LEVEL
+          value: "NVL"  # Use NVLink for GPU communication
+        - name: PYTORCH_CUDA_ALLOC_CONF
+          value: "max_split_size_mb:512"
+
+        # Model configuration
+        - name: HF_HOME
+          value: /models/cache
+        - name: TRANSFORMERS_CACHE
+          value: /models/cache
+
+        # Monitoring
+        - name: PROMETHEUS_MULTIPROC_DIR
+          value: /tmp/prometheus
+
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 300  # Model loading takes time
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 300
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+
+        # Resource requests and limits
+        resources:
+          requests:
+            cpu: "32"
+            memory: "400Gi"
+            nvidia.com/gpu: "8"  # 8x A100 GPUs
+            ephemeral-storage: "200Gi"
+          limits:
+            cpu: "64"
+            memory: "800Gi"
+            nvidia.com/gpu: "8"
+            ephemeral-storage: "300Gi"
+
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+        - name: cache-storage
+          mountPath: /tmp
+        - name: shm
+          mountPath: /dev/shm
+
+        securityContext:
+          runAsNonRoot: false  # GPU access requires root
+          capabilities:
+            add:
+            - SYS_ADMIN  # Required for GPU operations
+
+      # Sidecar for metrics collection
+      - name: metrics-exporter
+        image: nvidia/dcgm-exporter:3.1.8-3.1.5-ubuntu20.04
+        ports:
+        - name: metrics
+          containerPort: 9400
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: false
+          capabilities:
+            add:
+            - SYS_ADMIN
+
+      volumes:
+      - name: model-storage
+        emptyDir:
+          sizeLimit: 200Gi
+      - name: cache-storage
+        emptyDir:
+          sizeLimit: 50Gi
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 64Gi  # Large shared memory for GPU operations
+
+      # Priority class for critical workload
+      priorityClassName: llm-inference-high
+
+      # Termination grace period for graceful shutdown
+      terminationGracePeriodSeconds: 120
+
+      # Service account with S3 access
+      serviceAccountName: llm-inference-sa
+
+---
+# Service for vLLM
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-llama-3-70b
+  namespace: llm-inference
+  labels:
+    app: vllm
+    model: llama-3-70b
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: vllm
+    model: llama-3-70b
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 9400
+    targetPort: 9400
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vllm-llama-3-70b-hpa
+  namespace: llm-inference
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vllm-llama-3-70b
+  minReplicas: 2
+  maxReplicas: 4  # Max 4 replicas (32 GPUs total)
+  metrics:
+  # Scale based on request queue length
+  - type: Pods
+    pods:
+      metric:
+        name: vllm_num_requests_waiting
+      target:
+        type: AverageValue
+        averageValue: "10"  # Scale if avg waiting requests > 10
+  # Scale based on GPU utilization
+  - type: Pods
+    pods:
+      metric:
+        name: DCGM_FI_DEV_GPU_UTIL
+      target:
+        type: AverageValue
+        averageValue: "80"  # Scale if avg GPU utilization > 80%
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 min before scaling down
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+
+---
+# PodDisruptionBudget for HA
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vllm-llama-3-70b-pdb
+  namespace: llm-inference
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: vllm
+      model: llama-3-70b
+
+---
+# ConfigMap for model configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-config
+  namespace: llm-inference
+data:
+  model_bucket: "my-company-llm-models"
+  model_path: "llama-3-70b"
+  max_tokens: "4096"
+  temperature: "0.7"
+  top_p: "0.95"
+
+---
+# ServiceAccount with IRSA for S3 access
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: llm-inference-sa
+  namespace: llm-inference
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/llm-inference-s3-role
+
+---
+# PriorityClass for LLM workloads
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: llm-inference-high
+value: 1000000
+globalDefault: false
+description: "High priority for LLM inference workloads"

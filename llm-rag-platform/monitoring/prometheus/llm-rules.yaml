@@ -1,0 +1,187 @@
+# Prometheus Recording and Alerting Rules for LLM Platform
+
+groups:
+  - name: llm_performance
+    interval: 30s
+    rules:
+      # Recording rules for aggregated metrics
+      - record: llm:request_duration_seconds:p95
+        expr: histogram_quantile(0.95, sum(rate(vllm_request_duration_seconds_bucket[5m])) by (le, model))
+
+      - record: llm:request_duration_seconds:p99
+        expr: histogram_quantile(0.99, sum(rate(vllm_request_duration_seconds_bucket[5m])) by (le, model))
+
+      - record: llm:throughput:requests_per_second
+        expr: sum(rate(vllm_request_total[5m])) by (model)
+
+      - record: llm:throughput:tokens_per_second
+        expr: sum(rate(vllm_generation_tokens_total[5m])) by (model)
+
+      # GPU utilization
+      - record: gpu:utilization:average
+        expr: avg(DCGM_FI_DEV_GPU_UTIL) by (gpu, kubernetes_node)
+
+      - record: gpu:memory_used:percentage
+        expr: 100 * (DCGM_FI_DEV_FB_USED / DCGM_FI_DEV_FB_FREE)
+
+  - name: llm_alerts
+    interval: 30s
+    rules:
+      # Latency alerts
+      - alert: HighLLMLatency
+        expr: llm:request_duration_seconds:p95 > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          component: llm-inference
+        annotations:
+          summary: "High LLM inference latency ({{ $value }}s)"
+          description: "P95 latency for {{ $labels.model }} is {{ $value }}s (threshold: 2.0s)"
+
+      - alert: CriticalLLMLatency
+        expr: llm:request_duration_seconds:p95 > 5.0
+        for: 2m
+        labels:
+          severity: critical
+          component: llm-inference
+        annotations:
+          summary: "Critical LLM inference latency ({{ $value }}s)"
+          description: "P95 latency for {{ $labels.model }} is {{ $value }}s (threshold: 5.0s). Immediate action required."
+
+      # Throughput alerts
+      - alert: LowThroughput
+        expr: llm:throughput:requests_per_second < 10
+        for: 10m
+        labels:
+          severity: warning
+          component: llm-inference
+        annotations:
+          summary: "Low LLM throughput ({{ $value }} req/s)"
+          description: "LLM throughput for {{ $labels.model }} is only {{ $value }} req/s"
+
+      # Error rate alerts
+      - alert: HighErrorRate
+        expr: sum(rate(vllm_request_errors_total[5m])) by (model) / sum(rate(vllm_request_total[5m])) by (model) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: llm-inference
+        annotations:
+          summary: "High error rate ({{ $value | humanizePercentage }})"
+          description: "Error rate for {{ $labels.model }} is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # GPU alerts
+      - alert: GPUHighUtilization
+        expr: gpu:utilization:average > 95
+        for: 15m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} utilization high ({{ $value }}%)"
+          description: "GPU utilization on node {{ $labels.kubernetes_node }} is {{ $value }}% for 15+ minutes"
+
+      - alert: GPUMemoryHigh
+        expr: gpu:memory_used:percentage > 90
+        for: 10m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU memory usage high ({{ $value }}%)"
+          description: "GPU memory on {{ $labels.kubernetes_node }} is {{ $value }}% used"
+
+      - alert: GPUDown
+        expr: up{job="dcgm-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU metrics unavailable"
+          description: "DCGM exporter is down on {{ $labels.instance }}"
+
+      # Model server health
+      - alert: VLLMServerDown
+        expr: up{job="vllm-llama-3-70b"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: llm-inference
+        annotations:
+          summary: "vLLM server is down"
+          description: "vLLM server {{ $labels.instance }} is not responding"
+
+      - alert: VLLMHighQueueLength
+        expr: vllm_num_requests_waiting > 50
+        for: 5m
+        labels:
+          severity: warning
+          component: llm-inference
+        annotations:
+          summary: "High request queue length ({{ $value }})"
+          description: "{{ $value }} requests are waiting in the queue"
+
+      # RAG pipeline alerts
+      - alert: VectorDBDown
+        expr: up{job="qdrant"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: vector-db
+        annotations:
+          summary: "Vector database is down"
+          description: "Qdrant vector database at {{ $labels.instance }} is not responding"
+
+      - alert: RAGHighLatency
+        expr: histogram_quantile(0.95, sum(rate(rag_query_duration_seconds_bucket[5m])) by (le)) > 3.0
+        for: 5m
+        labels:
+          severity: warning
+          component: rag-pipeline
+        annotations:
+          summary: "High RAG query latency ({{ $value }}s)"
+          description: "P95 RAG query latency is {{ $value }}s (threshold: 3.0s)"
+
+      # Safety guardrails alerts
+      - alert: HighSafetyViolationRate
+        expr: sum(rate(guardrails_violations_total[5m])) by (violation_type) / sum(rate(guardrails_checks_total[5m])) > 0.10
+        for: 10m
+        labels:
+          severity: warning
+          component: safety-guardrails
+        annotations:
+          summary: "High safety violation rate ({{ $value | humanizePercentage }})"
+          description: "{{ $labels.violation_type }} violations at {{ $value | humanizePercentage }} (threshold: 10%)"
+
+      - alert: CriticalSafetyViolations
+        expr: sum(rate(guardrails_violations_total{risk_level="critical"}[5m])) > 1
+        for: 1m
+        labels:
+          severity: critical
+          component: safety-guardrails
+        annotations:
+          summary: "Critical safety violations detected"
+          description: "{{ $value }} critical safety violations per second"
+
+      # Cost optimization alerts
+      - alert: HighInferenceCost
+        expr: sum(rate(vllm_generation_tokens_total[1h])) * 0.002 / 1000 > 100
+        for: 1h
+        labels:
+          severity: warning
+          component: cost-optimization
+        annotations:
+          summary: "High inference cost (${{ $value }}/hour)"
+          description: "Token generation cost is ${{ $value }}/hour (threshold: $100/hour)"
+
+      # Capacity alerts
+      - alert: ApproachingCapacity
+        expr: sum(vllm_num_requests_running) / sum(vllm_max_num_seqs) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: capacity
+        annotations:
+          summary: "Approaching capacity ({{ $value | humanizePercentage }})"
+          description: "System is at {{ $value | humanizePercentage }} capacity. Consider scaling up."
