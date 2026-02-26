@@ -51,4 +51,6 @@ Go, TrainingJob CRD, Kopf, PVC, S3, GCS, NFS
 
 **[LLM Platform with RAG](./llm-rag-platform)**
 
+vLLM, RAG, Qdrant Vector DB, Terraform, Kubernetes, Prometheus, Grafana, Docker, AWS EKS, GCP GKE
+
 
