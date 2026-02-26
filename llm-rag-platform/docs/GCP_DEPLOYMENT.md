@@ -1,5 +1,5 @@
 # GCP Deployment Guide
-# Project 303: Enterprise LLM Platform with RAG
+# Enterprise LLM Platform with RAG
 
 ## Prerequisites
 
@@ -213,3 +213,4 @@ Enable `enable_qdrant_vm=true` for persistent storage.
 ### vLLM Spot VM preempted
 Spot VMs can be preempted by GCP. Add a startup script restart policy or use
 on-demand if preemption is too frequent for your workload.
+
