@@ -1,5 +1,5 @@
 # GCP Deployment Guide
-# Project 303: Enterprise LLM Platform with RAG
+# Project 13: Enterprise LLM Platform with RAG
 
 ## Prerequisites
 
@@ -311,3 +311,4 @@ You will be asked to confirm by typing the project ID. After deletion:
 - Go to https://console.cloud.google.com/billing to confirm $0 charges.
 
 > **Tip**: If you only want a temporary pause, use Option A or B. Use Option C only if you are done with the project entirely.
+
