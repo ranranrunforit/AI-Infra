@@ -251,10 +251,10 @@ class RAGPipeline:
                 )
             query_filter = Filter(must=conditions)
 
-        # Search vector database
-        results = self.vector_db.search(
+        # Search vector database (qdrant-client >= 1.12 uses query_points)
+        results = self.vector_db.query_points(
             collection_name=self.config.collection_name,
-            query_vector=query_embedding.tolist(),
+            query=query_embedding.tolist(),
             limit=top_k,
             query_filter=query_filter,
             score_threshold=self.config.min_relevance_score
@@ -262,7 +262,7 @@ class RAGPipeline:
 
         # Convert to Document objects
         documents = []
-        for result in results:
+        for result in results.points:
             doc = Document(
                 id=result.id,
                 text=result.payload["text"],

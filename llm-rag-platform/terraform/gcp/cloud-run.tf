@@ -70,6 +70,16 @@ resource "google_cloud_run_v2_service" "rag_api" {
       max_instance_count = var.cloud_run_max_instances
     }
 
+    # Direct VPC Egress — allows Cloud Run to reach Qdrant VM's internal IP
+    # without a separate VPC Access Connector (no extra cost)
+    vpc_access {
+      egress = "PRIVATE_RANGES_ONLY"
+      network_interfaces {
+        network    = "default"
+        subnetwork = "default"
+      }
+    }
+
     containers {
       # Image from Artifact Registry
       image = "${var.region}-docker.pkg.dev/${var.project_id}/rag-platform/rag-api:latest"
@@ -117,6 +127,19 @@ resource "google_cloud_run_v2_service" "rag_api" {
       env {
         name  = "ENABLE_PII_DETECTION"
         value = "true"
+      }
+
+      # Force offline mode — use only models pre-cached in the Docker image.
+      # Without this, transformers makes API calls to HuggingFace at startup,
+      # which gets rate-limited (429) and crashes the container.
+      env {
+        name  = "HF_HUB_OFFLINE"
+        value = "1"
+      }
+
+      env {
+        name  = "TRANSFORMERS_OFFLINE"
+        value = "1"
       }
 
       # ── Secrets from Secret Manager ─────────────────────────────────────────
@@ -198,30 +221,31 @@ resource "google_compute_instance" "qdrant" {
 
   network_interface {
     network = "default"
-    # No external IP for security (Cloud Run uses internal IP)
+    # External IP needed to download Docker + Qdrant image at startup
+    access_config {
+      # Ephemeral external IP
+    }
   }
 
   # Startup script: install Docker and run Qdrant
+  # Using <<-STARTUP heredoc. The script is kept minimal to avoid issues.
   metadata_startup_script = <<-STARTUP
-    #!/bin/bash
-    set -e
-    # Install Docker
-    curl -fsSL https://get.docker.com | sh
-
-    # Create data directory
-    mkdir -p /data/qdrant
-
-    # Run Qdrant
-    docker run -d \
-      --name qdrant \
-      --restart unless-stopped \
-      -p 6333:6333 \
-      -p 6334:6334 \
-      -v /data/qdrant:/qdrant/storage \
-      qdrant/qdrant:v1.9.0
-
-    echo "Qdrant started successfully"
-  STARTUP
+#!/bin/bash
+set -e
+apt-get update -y
+apt-get install -y docker.io
+systemctl start docker
+systemctl enable docker
+mkdir -p /data/qdrant
+docker run -d \
+  --name qdrant \
+  --restart unless-stopped \
+  -p 6333:6333 \
+  -p 6334:6334 \
+  -v /data/qdrant:/qdrant/storage \
+  qdrant/qdrant:v1.9.0
+echo "Qdrant started successfully"
+STARTUP
 
   metadata = {
     enable-osconfig = "TRUE"

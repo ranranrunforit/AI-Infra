@@ -59,13 +59,12 @@ cat ~/.config/gcloud/application_default_credentials.json | python3 -m json.tool
 
 > **Before running Terraform**: Make sure you completed the ADC credential setup in Step 1 (the `cp /tmp/tmp.*` command). Terraform will fail with auth errors if `~/.config/gcloud/application_default_credentials.json` doesn't exist.
 
-> **Order note**: The first `terraform apply` below will create everything **except** Cloud Run (which needs a Docker image). That's expected — complete Steps 4 and 5 first, then re-run `terraform apply` at the end of Step 6 to finish deploying Cloud Run.
+> **Order note**: The first `terraform apply` creates everything **except** Cloud Run (which needs a Docker image). That's expected — complete Steps 4–5 first, then re-run `terraform apply` in Step 6.
 
 ```bash
-cd reference-implementation/terraform/gcp
+cd ~/reference-implementation/terraform/gcp
 
-# Create terraform.tfvars
-# Using single quotes around EOF prevents shell variable expansion inside the heredoc.
+# Create terraform.tfvars — run this EXACTLY (don't mix with other commands)
 cat > terraform.tfvars <<'EOF'
 project_id    = "my-llm-rag-platform"
 region        = "us-central1"
@@ -80,22 +79,38 @@ enable_qdrant_vm = true
 enable_vllm_vm = false
 EOF
 
-# Verify the content of terraform.tfvars
-echo "--- Verifying terraform.tfvars ---"
+# Verify — should show ONLY key=value lines, no shell commands
 cat terraform.tfvars
-echo "----------------------------------"
 
-# Initialize Terraform and apply the configuration
-# This will deploy Cloud Run, Artifact Registry, Secret Manager, and optionally VMs.
-# Note: Cloud Run will be deployed, but it won't be functional until you build
-# and push the Docker image in Step 5.
+# Initialize and apply
 terraform init
 terraform plan -out=tfplan
 terraform apply tfplan
+```
 
-# Important: It can take a few minutes for new API permissions (e.g., Secret Manager)
-# to propagate fully across GCP after Terraform applies. If you encounter
-# permission errors in subsequent steps, wait a few minutes and retry.
+### Step 3b: Set Up Qdrant VM (if enabled)
+
+The Qdrant VM's startup script may fail due to line-ending issues. **Always verify and manually install if needed:**
+
+```bash
+# Wait ~2 min for VM to boot, then check if Docker is running
+gcloud compute ssh qdrant-vector-db --zone=us-central1-a -- "sudo docker ps"
+
+# If you see "docker: command not found", install manually:
+gcloud compute ssh qdrant-vector-db --zone=us-central1-a
+
+# Inside the VM, run:
+sudo apt-get update -y
+sudo apt-get install -y docker.io
+sudo mkdir -p /data/qdrant
+sudo docker run -d --name qdrant --restart unless-stopped \
+  -p 6333:6333 -p 6334:6334 \
+  -v /data/qdrant:/qdrant/storage qdrant/qdrant:v1.9.0
+
+# Verify Qdrant is running
+sudo docker ps
+curl -s http://localhost:6333/collections
+exit
 ```
 
 ## Step 4: Store API Keys in Secret Manager
@@ -112,59 +127,45 @@ echo -n "$(openssl rand -base64 32)" | \
 
 ## Step 5: Build and Push Docker Image
 
+Use **Cloud Build** to build and push (recommended — avoids Docker networking issues in Cloud Shell):
+
 ```bash
-# Authenticate Docker with Artifact Registry
-gcloud auth configure-docker us-central1-docker.pkg.dev
-
-# Build image (from reference-implementation/python/)
-cd ~/reference-implementation/python
-docker build -t rag-api:latest .
-
-# Tag and push
-PROJECT_ID=$(gcloud config get-value project)
-REGION=us-central1
-
-docker tag rag-api:latest \
-  ${REGION}-docker.pkg.dev/${PROJECT_ID}/rag-platform/rag-api:latest
-
-docker push \
-  ${REGION}-docker.pkg.dev/${PROJECT_ID}/rag-platform/rag-api:latest
-
-# Go to the Python app directory
 cd ~/reference-implementation/python
 
-# Build the Docker image
-docker build -t rag-api:latest .
+# Build and push via Cloud Build (builds on GCP servers, no local Docker push needed)
+gcloud builds submit \
+  --tag us-central1-docker.pkg.dev/my-llm-rag-platform/rag-platform/rag-api:latest .
 
-# Tag it for Artifact Registry
-docker tag rag-api:latest \
-  us-central1-docker.pkg.dev/my-llm-rag-platform/rag-platform/rag-api:latest
+# If prompted to enable Cloud Build API, type 'y'
+# If you get PERMISSION_DENIED, grant yourself the required roles:
+#   gcloud projects add-iam-policy-binding my-llm-rag-platform \
+#     --member="user:YOUR_EMAIL" --role="roles/cloudbuild.builds.editor"
+#   gcloud projects add-iam-policy-binding my-llm-rag-platform \
+#     --member="user:YOUR_EMAIL" --role="roles/storage.admin"
+#   sleep 30 && retry the gcloud builds submit command
 
-# Authenticate Docker with Artifact Registry
-gcloud auth configure-docker us-central1-docker.pkg.dev
-
-# Push the image
-docker push \
-  us-central1-docker.pkg.dev/my-llm-rag-platform/rag-platform/rag-api:latest
+# Build takes ~20 minutes (downloads PyTorch + embedding models)
+# Verify the image is in Artifact Registry:
+gcloud artifacts docker images list \
+  us-central1-docker.pkg.dev/my-llm-rag-platform/rag-platform
 ```
 
-## Step 6: Finish Cloud Run Deployment
+## Step 6: Deploy Cloud Run
 
-Now that the Docker image is pushed, re-run Terraform. It will only create Cloud Run (everything else already exists):
+Now that the Docker image is pushed, re-run Terraform to deploy Cloud Run:
 
 ```bash
-# Go back to terraform dir and re-apply (only Cloud Run left)
 cd ~/reference-implementation/terraform/gcp
 terraform plan -out=tfplan && terraform apply tfplan
 
 # Get the service URL
-PROJECT_ID=$(gcloud config get-value project)
-REGION=us-central1
-gcloud run services describe rag-api --region=${REGION} \
+gcloud run services describe rag-api --region=us-central1 \
   --format="value(status.url)"
 ```
 
-> **Why re-run Terraform instead of `gcloud run services update`?** The first `terraform apply` failed to create Cloud Run because the image didn't exist yet. Re-running `terraform apply` is cleaner — it picks up exactly where it left off and keeps Terraform state consistent.
+> **Note**: If Cloud Run fails with startup probe errors, check the logs:
+> `gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=rag-api" --limit=15 --format="value(textPayload)"`
+> Common issues: Qdrant VM not ready yet (wait and retry), or missing secrets (complete Step 4).
 
 ## Step 7: Test the Deployment
 

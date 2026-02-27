@@ -61,6 +61,7 @@ resource "google_project_service" "apis" {
     "iam.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
+    "vpcaccess.googleapis.com",            # VPC Access (Cloud Run → VPC)
   ])
 
   service            = each.value
