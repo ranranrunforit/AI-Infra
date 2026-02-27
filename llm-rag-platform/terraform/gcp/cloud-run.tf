@@ -146,9 +146,9 @@ resource "google_cloud_run_v2_service" "rag_api" {
           path = "/health"
           port = 8080
         }
-        initial_delay_seconds = 30
+        initial_delay_seconds = 60
         period_seconds        = 10
-        failure_threshold     = 10
+        failure_threshold     = 20
       }
 
       liveness_probe {

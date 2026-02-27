@@ -1,5 +1,5 @@
 # GCP Deployment Guide
-# Project 13: Enterprise LLM Platform with RAG
+# Project 303: Enterprise LLM Platform with RAG
 
 ## Prerequisites
 
@@ -139,6 +139,7 @@ docker build -t rag-api:latest .
 # Tag it for Artifact Registry
 docker tag rag-api:latest \
   us-central1-docker.pkg.dev/my-llm-rag-platform/rag-platform/rag-api:latest
+
 # Authenticate Docker with Artifact Registry
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
@@ -311,4 +312,3 @@ You will be asked to confirm by typing the project ID. After deletion:
 - Go to https://console.cloud.google.com/billing to confirm $0 charges.
 
 > **Tip**: If you only want a temporary pause, use Option A or B. Use Option C only if you are done with the project entirely.
-

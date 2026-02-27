@@ -35,14 +35,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed Python packages from builder
-COPY --from=builder /root/.local /root/.local
+# Copy installed Python packages from builder to system-wide location
+# (NOT /root/.local — appuser can't read /root/)
+COPY --from=builder /root/.local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /root/.local/bin /usr/local/bin
 
 # Copy application source
 COPY src/ ./src/
-
-# Ensure scripts in .local are in PATH
-ENV PATH=/root/.local/bin:$PATH
 
 # ── HuggingFace model cache ───────────────────────────────────────────────────
 # Models will be downloaded on first startup and cached in /tmp or a mounted volume.
@@ -51,7 +50,8 @@ ENV PATH=/root/.local/bin:$PATH
 ENV HF_HOME=/app/.cache/huggingface
 ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers
 
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5')" && \
+    python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-base')"
 
 # ── Runtime config ─────────────────────────────────────────────────────────────
 # Cloud Run sets PORT automatically; default 8080
