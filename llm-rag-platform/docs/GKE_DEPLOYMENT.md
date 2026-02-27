@@ -1,5 +1,5 @@
 # GKE (Kubernetes) Deployment Guide
-# Project 13: Enterprise LLM Platform with RAG
+# Project 303: Enterprise LLM Platform with RAG
 
 Running the full RAG platform on **Google Kubernetes Engine (GKE)** gives you
 production-grade autoscaling, rolling updates, and centralized observability —
@@ -341,4 +341,3 @@ kubectl delete namespace llm-inference
 > **Tip**: For dev/testing, use a single-node Standard cluster with e2-medium
 > nodes (~$30/month) and scale down replicas to 1. The Colab notebook is
 > completely free for quick experimentation.
-

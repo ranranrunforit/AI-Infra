@@ -1,5 +1,5 @@
 # GCP Deployment Guide
-# Project 13: Enterprise LLM Platform with RAG
+# Project 303: Enterprise LLM Platform with RAG
 
 ## Prerequisites
 
@@ -24,49 +24,78 @@ gcloud config set project my-llm-rag-platform
 
 # Enable billing (required for Cloud Run, Artifact Registry)
 # Do this in the GCP Console: https://console.cloud.google.com/billing
+# Link your billing account to project "my-llm-rag-platform"
+# If your project isn't linked, click Manage Billing Accounts, find your project in the list, click the three-dot menu next to it, and select Change billing. Choose your billing account from the drop-down.
 
-# Authenticate
+# Step A — Authenticate your gcloud CLI
 gcloud auth login
+
+# Step B — Set up Application Default Credentials (ADC) for Terraform
+# Cloud Shell runs on a GCE VM, so credentials are saved to a /tmp directory,
+# NOT to ~/.config/gcloud/. Run the login, then copy the file to the standard location.
 gcloud auth application-default login
+# When prompted "You are running on a GCE VM... continue?" → type y
+# Complete the browser sign-in and paste the verification code back here.
+
+# After login completes, copy credentials to the standard location Terraform expects:
+mkdir -p ~/.config/gcloud
+cp /tmp/tmp.*/application_default_credentials.json \
+  ~/.config/gcloud/application_default_credentials.json
+
+# Unset this env var if you set it manually in a previous attempt (it overrides ADC)
+unset GOOGLE_APPLICATION_CREDENTIALS
+
+# Confirm the credentials file exists
+cat ~/.config/gcloud/application_default_credentials.json | python3 -m json.tool | head -3
 ```
 
 ## Step 2: Get Your Gemini API Key
 
 1. Go to https://aistudio.google.com/app/apikey
 2. Click **Create API Key** → Select your project
-3. **With Google Pro account**, you get access to:
-   - `gemini-2.0-flash` (fast, recommended)
-   - `gemini-2.0-pro-exp-02-05` (most capable)
-   - `gemini-1.5-pro` (stable previous gen)
 
-> **Note on Gemini 3.0**: As of February 2026, Google has not released a public
-> "Gemini 3.0". The latest models are in the Gemini 2.0 family. Gemini 2.0 Pro
-> Experimental (`gemini-2.0-pro-exp-02-05`) is the most capable available model.
 
 ## Step 3: Deploy Infrastructure with Terraform
+
+> **Before running Terraform**: Make sure you completed the ADC credential setup in Step 1 (the `cp /tmp/tmp.*` command). Terraform will fail with auth errors if `~/.config/gcloud/application_default_credentials.json` doesn't exist.
+
+> **Order note**: The first `terraform apply` below will create everything **except** Cloud Run (which needs a Docker image). That's expected — complete Steps 4 and 5 first, then re-run `terraform apply` at the end of Step 6 to finish deploying Cloud Run.
 
 ```bash
 cd reference-implementation/terraform/gcp
 
 # Create terraform.tfvars
-cat > terraform.tfvars <<EOF
+# Using single quotes around EOF prevents shell variable expansion inside the heredoc.
+cat > terraform.tfvars <<'EOF'
 project_id    = "my-llm-rag-platform"
 region        = "us-central1"
 environment   = "production"
-gemini_model  = "gemini-2.0-flash"
+gemini_model  = "gemini-3.0-flash"
 llm_backend   = "gemini"
 
-# Optional: Enable Qdrant VM (~$30/month for e2-medium)
-enable_qdrant_vm = false
+# Enable Qdrant VM for persistent vector storage (~$30/month for e2-medium)
+enable_qdrant_vm = true
 
 # Optional: Enable vLLM Spot VM (Mistral 7B on L4 GPU, ~$100/month spot)
 enable_vllm_vm = false
 EOF
 
-# Initialize and apply
+# Verify the content of terraform.tfvars
+echo "--- Verifying terraform.tfvars ---"
+cat terraform.tfvars
+echo "----------------------------------"
+
+# Initialize Terraform and apply the configuration
+# This will deploy Cloud Run, Artifact Registry, Secret Manager, and optionally VMs.
+# Note: Cloud Run will be deployed, but it won't be functional until you build
+# and push the Docker image in Step 5.
 terraform init
 terraform plan -out=tfplan
 terraform apply tfplan
+
+# Important: It can take a few minutes for new API permissions (e.g., Secret Manager)
+# to propagate fully across GCP after Terraform applies. If you encounter
+# permission errors in subsequent steps, wait a few minutes and retry.
 ```
 
 ## Step 4: Store API Keys in Secret Manager
@@ -88,7 +117,7 @@ echo -n "$(openssl rand -base64 32)" | \
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
 # Build image (from reference-implementation/python/)
-cd reference-implementation/python
+cd ~/reference-implementation/python
 docker build -t rag-api:latest .
 
 # Tag and push
@@ -100,21 +129,41 @@ docker tag rag-api:latest \
 
 docker push \
   ${REGION}-docker.pkg.dev/${PROJECT_ID}/rag-platform/rag-api:latest
+
+# Go to the Python app directory
+cd ~/reference-implementation/python
+
+# Build the Docker image
+docker build -t rag-api:latest .
+
+# Tag it for Artifact Registry
+docker tag rag-api:latest \
+  us-central1-docker.pkg.dev/my-llm-rag-platform/rag-platform/rag-api:latest
+# Authenticate Docker with Artifact Registry
+gcloud auth configure-docker us-central1-docker.pkg.dev
+
+# Push the image
+docker push \
+  us-central1-docker.pkg.dev/my-llm-rag-platform/rag-platform/rag-api:latest
 ```
 
-## Step 6: Deploy to Cloud Run
+## Step 6: Finish Cloud Run Deployment
 
-After pushing the image, update Cloud Run to use it:
+Now that the Docker image is pushed, re-run Terraform. It will only create Cloud Run (everything else already exists):
 
 ```bash
-gcloud run services update rag-api \
-  --image=${REGION}-docker.pkg.dev/${PROJECT_ID}/rag-platform/rag-api:latest \
-  --region=${REGION}
+# Go back to terraform dir and re-apply (only Cloud Run left)
+cd ~/reference-implementation/terraform/gcp
+terraform plan -out=tfplan && terraform apply tfplan
 
 # Get the service URL
+PROJECT_ID=$(gcloud config get-value project)
+REGION=us-central1
 gcloud run services describe rag-api --region=${REGION} \
   --format="value(status.url)"
 ```
+
+> **Why re-run Terraform instead of `gcloud run services update`?** The first `terraform apply` failed to create Cloud Run because the image didn't exist yet. Re-running `terraform apply` is cleaner — it picks up exactly where it left off and keeps Terraform state consistent.
 
 ## Step 7: Test the Deployment
 
@@ -214,3 +263,51 @@ Enable `enable_qdrant_vm=true` for persistent storage.
 Spot VMs can be preempted by GCP. Add a startup script restart policy or use
 on-demand if preemption is too frequent for your workload.
 
+---
+
+## Cleanup: Stop All Charges Completely
+
+Follow these steps **in order** to ensure nothing keeps billing.
+
+### Option A: Destroy only the Qdrant VM (keep the rest running)
+
+```bash
+# From reference-implementation/terraform/gcp/
+cd reference-implementation/terraform/gcp
+
+# Disable the Qdrant VM and re-apply
+cat >> terraform.tfvars <<'EOF'
+enable_qdrant_vm = false
+EOF
+
+terraform apply
+```
+
+> This stops the VM and its ~$30/month charge. Cloud Run and GCS remain (free tier).
+
+### Option B: Destroy ALL infrastructure (Terraform-managed resources)
+
+```bash
+# From reference-implementation/terraform/gcp/
+cd reference-implementation/terraform/gcp
+
+# Tear down everything Terraform created (Cloud Run, VM, Artifact Registry, etc.)
+terraform destroy
+```
+
+Type `yes` when prompted. This deletes all VMs, Cloud Run services, and Artifact Registry images.
+
+### Option C: Delete the entire GCP project (hardest stop — removes everything)
+
+```bash
+# This permanently deletes the project and ALL resources inside it.
+# Billing stops completely after deletion (usually within minutes).
+gcloud projects delete my-llm-rag-platform
+```
+
+You will be asked to confirm by typing the project ID. After deletion:
+- All VMs, Cloud Run services, storage buckets, secrets, and images are gone.
+- The project ID `my-llm-rag-platform` cannot be reused for 30 days.
+- Go to https://console.cloud.google.com/billing to confirm $0 charges.
+
+> **Tip**: If you only want a temporary pause, use Option A or B. Use Option C only if you are done with the project entirely.
