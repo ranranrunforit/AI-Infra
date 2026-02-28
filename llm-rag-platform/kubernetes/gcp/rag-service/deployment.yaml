@@ -22,7 +22,7 @@ metadata:
   namespace: llm-inference
 data:
   LLM_BACKEND: "gemini"
-  GEMINI_MODEL: "gemini-2.0-flash"
+  GEMINI_MODEL: "gemini-3-flash-preview"
   EMBEDDING_MODEL: "BAAI/bge-small-en-v1.5"
   QDRANT_HOST: "qdrant-service"      # Internal K8s service name
   QDRANT_PORT: "6333"
@@ -61,7 +61,7 @@ metadata:
   namespace: llm-inference
   annotations:
     # Workload Identity: link to GCP Service Account for GCS / Secret Manager access
-    iam.gke.io/gcp-service-account: rag-api-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: rag-api-sa@my-llm-rag-platform.iam.gserviceaccount.com
 
 ---
 # ── Deployment ────────────────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ spec:
         # Replace with your Artifact Registry image after building:
         #   docker build -t us-central1-docker.pkg.dev/YOUR_PROJECT/rag-platform/rag-api:latest python/
         #   docker push us-central1-docker.pkg.dev/YOUR_PROJECT/rag-platform/rag-api:latest
-        image: us-central1-docker.pkg.dev/YOUR_PROJECT_ID/rag-platform/rag-api:latest
+        image: us-central1-docker.pkg.dev/my-llm-rag-platform/rag-platform/rag-api:latest
         imagePullPolicy: Always
 
         ports:
@@ -161,15 +161,8 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
 
-        # Model cache on ephemeral storage
-        volumeMounts:
-        - name: model-cache
-          mountPath: /app/.cache
-
-      volumes:
-      - name: model-cache
-        emptyDir:
-          sizeLimit: 2Gi    # Enough for bge-small (~500MB) + reranker (~400MB)
+        # Models are pre-downloaded in the Docker image at /app/.cache
+        # No volume mount needed — using the baked-in cache is faster
 
 ---
 # ── Service (ClusterIP - accessible within cluster) ───────────────────────────
@@ -241,8 +234,7 @@ metadata:
     kubernetes.io/ingress.allow-http: "false"                   # HTTPS only
 spec:
   rules:
-  - host: api.YOUR_DOMAIN.com     # Replace with your domain (or use raw IP)
-    http:
+  - http:  # No host = matches any hostname (use raw load balancer IP)
       paths:
       - path: /
         pathType: Prefix

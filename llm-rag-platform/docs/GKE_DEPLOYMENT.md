@@ -82,7 +82,7 @@ kubectl get nodes
 gcloud artifacts repositories create rag-platform \
     --repository-format=docker \
     --location=$REGION \
-    --description="Project 303 RAG Platform images"
+    --description="Project 13 RAG Platform images"
 
 # Authenticate Docker
 gcloud auth configure-docker ${REGION}-docker.pkg.dev
@@ -181,6 +181,7 @@ kubectl port-forward svc/rag-api-service 8080:80 -n llm-inference &
 RAG_API_KEY=$(kubectl get secret rag-api-secrets -n llm-inference \
     -o jsonpath='{.data.API_KEY}' | base64 -d)
 
+# Ingest a document
 curl -X POST http://localhost:8080/v1/documents \
     -H "Content-Type: application/json" \
     -H "X-API-Key: ${RAG_API_KEY}" \
@@ -192,7 +193,7 @@ curl -X POST http://localhost:8080/v1/documents \
       }]
     }'
 
-# Query it
+# Query it (Test Chat)
 curl -X POST http://localhost:8080/v1/chat \
     -H "Content-Type: application/json" \
     -H "X-API-Key: ${RAG_API_KEY}" \
@@ -246,26 +247,102 @@ kubectl describe ingress rag-api-ingress -n llm-inference
 
 ---
 
-## Step 9: Enable Prometheus Monitoring
+## Step 9: Enable Prometheus & Grafana Monitoring
+
+The project includes custom Prometheus and Grafana manifests with auto-provisioned
+datasources, LLM alert rules, and a pre-built dashboard.
+
+### 9a. Deploy Prometheus
 
 ```bash
-# Apply existing Prometheus rules
-kubectl create configmap prometheus-rules \
-    --from-file=monitoring/prometheus/llm-rules.yaml \
-    -n llm-inference
+# Prometheus manifest creates the `monitoring` namespace, RBAC, config, and deployment
+kubectl apply -f kubernetes/gcp/monitoring/prometheus.yaml
 
-# Install kube-prometheus-stack (Prometheus + Grafana)
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
+# Load the LLM alert/recording rules as a ConfigMap
+kubectl create configmap llm-prometheus-rules \
+    --from-file=llm-rules.yaml=monitoring/prometheus/llm-rules.yaml \
+    -n monitoring --dry-run=client -o yaml | kubectl apply -f -
 
-helm install kube-prometheus prometheus-community/kube-prometheus-stack \
-    --namespace monitoring \
-    --create-namespace \
-    --set grafana.adminPassword=admin123
+# Verify Prometheus is running
+kubectl get pods -n monitoring
+# Expected: prometheus-xxx  1/1  Running
+```
 
-# Access Grafana
-kubectl port-forward svc/kube-prometheus-grafana 3000:80 -n monitoring
-# Open: http://localhost:3000 (admin / admin123)
+### 9b. Deploy Grafana
+
+```bash
+# Create the Grafana admin secret BEFORE deploying
+# (grafana.yaml references this secret but does not create it with data)
+kubectl create secret generic grafana-secrets \
+    --from-literal=admin-password=$(openssl rand -base64 16) \
+    -n monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+# Deploy Grafana (includes auto-provisioned Prometheus datasource + LLM dashboard)
+kubectl apply -f kubernetes/gcp/monitoring/grafana.yaml
+
+# Watch pods come up (initContainer copies dashboard JSON, then Grafana starts)
+kubectl get pods -n monitoring -w
+# Expected: grafana-xxx  1/1  Running
+```
+
+> **Important:** If you re-apply `grafana.yaml` and the pod shows
+> `CreateContainerConfigError`, the empty Secret definition in the YAML
+> overwrote your real secret. Recreate the secret and restart:
+> ```bash
+> kubectl create secret generic grafana-secrets \
+>     --from-literal=admin-password=$(openssl rand -base64 16) \
+>     -n monitoring --dry-run=client -o yaml | kubectl apply -f -
+> kubectl rollout restart deployment/grafana -n monitoring
+> ```
+
+### 9c. Access Grafana
+
+```bash
+# Get the Grafana external IP (LoadBalancer — takes ~2 min to provision)
+kubectl get svc grafana-service -n monitoring
+
+# Get the admin password
+kubectl get secret grafana-secrets -n monitoring \
+    -o jsonpath='{.data.admin-password}' | base64 -d && echo
+
+# Open in browser: http://<GRAFANA_EXTERNAL_IP>
+# Login: admin / <password from above>
+# Dashboard: Home → "LLM RAG Platform" folder → "LLM RAG Platform - Project 303"
+```
+
+### 9d. Access Prometheus
+
+```bash
+# Prometheus uses ClusterIP — access via port-forward
+kubectl port-forward -n monitoring svc/prometheus-service 9090:9090 &
+
+# Verify scrape targets are healthy
+curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[].labels.job'
+# Expected: "rag-api", "qdrant", "prometheus"
+```
+
+### 9e. Generate Dashboard Data
+
+Some panels (Request Rate, Latency, etc.) only show data after traffic is sent.
+The "Safety Violations" panel only shows data when actual violations are triggered.
+
+```bash
+# Set variables
+EXTERNAL_IP=$(kubectl get svc rag-api-service -n llm-inference \
+    -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+RAG_API_KEY=$(kubectl get secret rag-api-secrets -n llm-inference \
+    -o jsonpath='{.data.API_KEY}' | base64 -d)
+
+# Send a few requests to populate the dashboard
+for i in $(seq 1 5); do
+  curl -s -X POST "http://${EXTERNAL_IP}/v1/chat" \
+      -H "Content-Type: application/json" \
+      -H "X-API-Key: ${RAG_API_KEY}" \
+      -d '{"query": "What is the refund policy?", "user_id": "test-user"}'
+  echo ""
+done
+
+# Wait ~30 seconds, then refresh Grafana — panels will show data
 ```
 
 ---
@@ -321,6 +398,41 @@ kubectl rollout status deployment/rag-api -n llm-inference
 
 # Delete everything (clean up)
 kubectl delete namespace llm-inference
+```
+
+## Troubleshooting
+
+```bash
+# ── Rebuild & redeploy the RAG API image ──
+cd ~/reference-implementation/python
+gcloud builds submit \
+    --tag us-central1-docker.pkg.dev/${PROJECT_ID}/rag-platform/rag-api:latest .
+
+cd ~/reference-implementation
+kubectl apply -f kubernetes/gcp/rag-service/deployment.yaml
+kubectl rollout restart deployment/rag-api -n llm-inference
+kubectl get pods -n llm-inference -w
+
+# ── Clean up failed/stuck pods ──
+kubectl delete pods -n llm-inference --field-selector=status.phase=Failed
+kubectl delete pods -n llm-inference --field-selector=status.phase!=Running
+kubectl get pods -n llm-inference
+
+# ── View pod logs ──
+kubectl logs -l app=rag-api -n llm-inference --tail=100
+kubectl logs -f -n llm-inference -l app=rag-api --max-log-requests=5
+
+# ── Describe a failing pod ──
+kubectl describe pod -l app=rag-api -n llm-inference
+
+# ── Reset Grafana (if dashboards are stale or pod won't start) ──
+kubectl delete deployment grafana -n monitoring
+kubectl delete pvc grafana-pvc -n monitoring
+kubectl create secret generic grafana-secrets \
+    --from-literal=admin-password=$(openssl rand -base64 16) \
+    -n monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f kubernetes/gcp/monitoring/grafana.yaml
+kubectl get pods -n monitoring -w
 ```
 
 ---

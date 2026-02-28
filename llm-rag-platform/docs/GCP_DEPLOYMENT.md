@@ -167,6 +167,7 @@ gcloud run services describe rag-api --region=us-central1 \
 > `gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=rag-api" --limit=15 --format="value(textPayload)"`
 > Common issues: Qdrant VM not ready yet (wait and retry), or missing secrets (complete Step 4).
 
+
 ## Step 7: Test the Deployment
 
 ```bash
@@ -198,6 +199,12 @@ curl -X POST ${SERVICE_URL}/v1/chat \
     "query": "What is the refund policy?",
     "user_id": "test-user"
   }'
+
+
+curl -X POST ${SERVICE_URL}/v1/retrieve \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${API_KEY}" \
+  -d '{"query": "What is the refund policy?", "top_k": 3}'
 ```
 
 ## Step 8 (Optional): Enable vLLM Self-Hosted Backend

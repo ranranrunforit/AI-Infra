@@ -162,7 +162,7 @@ data:
           "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
           "targets": [{
             "datasource": {"uid": "prometheus-ds"},
-            "expr": "sum(rate(rag_requests_total{status='error'}[5m])) / sum(rate(rag_requests_total[5m]))",
+            "expr": "sum(rate(rag_requests_total{status=\"error\"}[5m])) / sum(rate(rag_requests_total[5m])) or vector(0)",
             "legendFormat": ""
           }],
           "fieldConfig": {
@@ -244,7 +244,7 @@ data:
           "gridPos": {"h": 4, "w": 8, "x": 16, "y": 20},
           "targets": [{
             "datasource": {"uid": "prometheus-ds"},
-            "expr": "container_memory_working_set_bytes{container='rag-api', namespace='llm-inference'} / 1024 / 1024",
+            "expr": "process_resident_memory_bytes{job=\"rag-api\"} / 1024 / 1024",
             "legendFormat": "{{pod}}"
           }],
           "fieldConfig": {"defaults": {"unit": "MiB"}}
@@ -290,6 +290,25 @@ spec:
         runAsUser: 472    # grafana user
         fsGroup: 472
 
+      # Copy dashboard JSON from ConfigMap into the PVC so it's accessible
+      # (ConfigMap can't mount under a PVC-backed directory)
+      initContainers:
+      - name: copy-dashboards
+        image: busybox:1.36
+        command:
+          - sh
+          - -c
+          - |
+            mkdir -p /grafana-storage/dashboards
+            cp /mnt/dashboards/*.json /grafana-storage/dashboards/
+            echo "Dashboards copied successfully"
+            ls -la /grafana-storage/dashboards/
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /grafana-storage
+        - name: grafana-dashboard-json
+          mountPath: /mnt/dashboards
+
       containers:
       - name: grafana
         image: grafana/grafana:10.4.0
@@ -332,8 +351,6 @@ spec:
           mountPath: /etc/grafana/provisioning/datasources
         - name: grafana-dashboards-config
           mountPath: /etc/grafana/provisioning/dashboards
-        - name: grafana-dashboard-json
-          mountPath: /var/lib/grafana/dashboards
 
         livenessProbe:
           httpGet:
