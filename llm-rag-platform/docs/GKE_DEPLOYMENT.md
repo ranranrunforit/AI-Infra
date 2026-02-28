@@ -341,4 +341,3 @@ kubectl delete namespace llm-inference
 > **Tip**: For dev/testing, use a single-node Standard cluster with e2-medium
 > nodes (~$30/month) and scale down replicas to 1. The Colab notebook is
 > completely free for quick experimentation.
-

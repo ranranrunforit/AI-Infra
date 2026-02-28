@@ -16,13 +16,13 @@ pydantic>=2.0.0
 python-multipart>=0.0.9   # For file uploads
 
 # ── RAG Pipeline (unchanged from original architecture) ───────────────────────
-qdrant-client>=1.7.0
+qdrant-client>=1.9.0,<1.11.0  # Must match Qdrant server version (1.9.0); minor diff <= 1
 # HuggingFace embedding models (bge-small ~500MB, bge-large ~1.3GB)
 sentence-transformers>=2.6.0   # Includes CrossEncoder for reranking
 numpy>=1.24.0
 
 # ── GCP / Gemini Pro (primary LLM backend) ────────────────────────────────────
-google-generativeai>=0.8.0    # Gemini Pro API (free with Google Pro account)
+google-generativeai>=0.8.4    # Gemini API (>= 0.8.4 for v1beta/gemini-3 models)
 google-cloud-storage>=2.15.0  # GCS for document storage (optional)
 
 # ── HTTP Client (for vLLM API calls) ─────────────────────────────────────────

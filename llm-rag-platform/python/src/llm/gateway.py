@@ -73,16 +73,19 @@ class GeminiProvider(LLMProvider):
     - Local development
     """
 
-    # Latest Gemini models available as of February 2026
+    # Gemini models - check available models with:
+    # curl "https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY" | grep '"name"'
     SUPPORTED_MODELS = [
-        "gemini-2.0-flash",             # Fast, free quota friendly
-        "gemini-2.0-flash-thinking-exp", # Thinking/reasoning variant
-        "gemini-2.0-pro-exp-02-05",     # Most capable (Google Pro account)
-        "gemini-1.5-pro",               # Previous generation stable Pro
-        "gemini-1.5-flash",             # Previous generation Flash
+        "gemini-3-flash-preview",        # Latest Gemini 3 Flash
+        "gemini-3-pro-preview",          # Latest Gemini 3 Pro
+        "gemini-2.5-flash",             # Stable, fast
+        "gemini-2.5-pro",               # Most capable stable
+        "gemini-2.0-flash",             # May be deprecated for new users
+        "gemini-1.5-pro",               # Previous generation
+        "gemini-1.5-flash",             # Previous generation
     ]
 
-    DEFAULT_MODEL = "gemini-2.0-flash"
+    DEFAULT_MODEL = "gemini-2.5-flash"
 
     def __init__(
         self,

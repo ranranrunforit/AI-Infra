@@ -69,7 +69,7 @@ cat > terraform.tfvars <<'EOF'
 project_id    = "my-llm-rag-platform"
 region        = "us-central1"
 environment   = "production"
-gemini_model  = "gemini-3.0-flash"
+gemini_model  = "gemini-3-flash-preview"
 llm_backend   = "gemini"
 
 # Enable Qdrant VM for persistent vector storage (~$30/month for e2-medium)
@@ -314,3 +314,38 @@ You will be asked to confirm by typing the project ID. After deletion:
 
 > **Tip**: If you only want a temporary pause, use Option A or B. Use Option C only if you are done with the project entirely.
 
+
+---
+
+## Debugging Playbook
+
+🔍 Debug Step 1: Check the detailed logs
+```bash
+# Get the FULL error with timestamps (not just textPayload)
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=rag-api AND severity>=ERROR" \
+  --limit=5 --format="json" --project=my-llm-rag-platform | head -100
+```
+
+🔍 Debug Step 2: Verify what env vars Cloud Run actually has
+```bash
+gcloud run services describe rag-api --region=us-central1 \
+  --format="yaml(spec.template.spec.containers[0].env)"
+This tells you exactly what GEMINI_MODEL and GOOGLE_API_KEY the running container sees.
+```
+
+🔍 Debug Step 3: Test the Gemini API key directly
+```bash
+# Get the API key from Secret Manager
+API_KEY_GEMINI=$(gcloud secrets versions access latest --secret=rag-google-api-key)
+# Test it directly against the Gemini API (bypasses your app completely)
+curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY_GEMINI}" \
+  -H "Content-Type: application/json" \
+  -d '{"contents":[{"parts":[{"text":"Say hello"}]}]}'
+If this returns a 404, the API key is the problem. If it works, the issue is in the app code.
+```
+
+🔍 Debug Step 4: Check if the Generative Language API is enabled
+```bash
+gcloud services list --enabled --filter="generativelanguage" --project=my-llm-rag-platform
+Run these 4 commands and paste the output. This will tell us exactly where the 404 is coming from — is it the API key, the model name, or the API not being enabled?
+```

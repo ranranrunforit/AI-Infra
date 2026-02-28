@@ -394,7 +394,7 @@ async def ingest_documents(
             doc_id=doc_id,
             metadata=metadata,
             chunk_size=request.chunk_size,
-            chunk_overlap=request.chunk_overlap,
+            overlap=request.chunk_overlap,
         )
         all_chunks.extend(chunks)
 
@@ -410,6 +410,50 @@ async def ingest_documents(
         logger.error(f"Document ingestion failed: {e}")
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
+
+class RetrieveRequest(BaseModel):
+    """Vector retrieval-only request (no LLM generation)"""
+    query: str = Field(..., description="Search query", min_length=1, max_length=4096)
+    top_k: int = Field(default=5, ge=1, le=50, description="Number of results to return")
+    filters: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters")
+
+
+@app.post("/v1/retrieve", tags=["RAG"])
+async def retrieve(
+    request: RetrieveRequest,
+    _: str = Depends(verify_api_key),
+):
+    """
+    Retrieve relevant document chunks from the vector knowledge base without LLM generation.
+    Useful for inspecting what the retriever finds for a given query.
+    """
+    if not _pipeline:
+        raise HTTPException(status_code=503, detail="Service initializing")
+
+    try:
+        documents = await _pipeline.retrieve_dense(
+            query=request.query,
+            top_k=request.top_k,
+            filters=request.filters,
+        )
+        documents = await _pipeline.rerank(query=request.query, documents=documents, top_k=request.top_k)
+    except Exception as e:
+        logger.error(f"Retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
+
+    return {
+        "query": request.query,
+        "num_results": len(documents),
+        "results": [
+            {
+                "id": doc.id,
+                "text": doc.text,
+                "metadata": doc.metadata,
+                "score": doc.score,
+            }
+            for doc in documents
+        ],
+    }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point

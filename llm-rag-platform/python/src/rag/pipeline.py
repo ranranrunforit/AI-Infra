@@ -10,6 +10,7 @@ Works on Google Colab (free tier with bge-small, Pro with bge-large).
 
 import asyncio
 import logging
+import uuid
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -74,7 +75,7 @@ class RAGConfig:
     # LLM backend
     llm_backend: str = "gemini"  # gemini | vllm | openai
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-3-flash-preview"
     vllm_endpoint: Optional[str] = None
 
     @classmethod
@@ -87,7 +88,7 @@ class RAGConfig:
             collection_name=os.getenv("COLLECTION_NAME", "enterprise_knowledge"),
             llm_backend=os.getenv("LLM_BACKEND", "gemini"),
             gemini_api_key=os.getenv("GOOGLE_API_KEY"),
-            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
             vllm_endpoint=os.getenv("VLLM_ENDPOINT"),
             enable_reranking=os.getenv("ENABLE_RERANKING", "true").lower() == "true",
         )
@@ -199,7 +200,7 @@ class RAGPipeline:
         points = []
         for i, (doc, embedding) in enumerate(zip(documents, embeddings)):
             point = PointStruct(
-                id=doc.id,
+                id=str(uuid.uuid5(uuid.NAMESPACE_DNS, doc.id)),
                 vector=embedding.tolist(),
                 payload={
                     "text": doc.text,
@@ -251,18 +252,20 @@ class RAGPipeline:
                 )
             query_filter = Filter(must=conditions)
 
-        # Search vector database (qdrant-client >= 1.12 uses query_points)
-        results = self.vector_db.query_points(
+        # Search vector database using search() — compatible with Qdrant server 1.9+
+        # (query_points() requires server >= 1.10, which our server does not yet support)
+        results = self.vector_db.search(
             collection_name=self.config.collection_name,
-            query=query_embedding.tolist(),
+            query_vector=query_embedding.tolist(),
             limit=top_k,
             query_filter=query_filter,
-            score_threshold=self.config.min_relevance_score
+            score_threshold=self.config.min_relevance_score,
+            with_payload=True,
         )
 
         # Convert to Document objects
         documents = []
-        for result in results.points:
+        for result in results:
             doc = Document(
                 id=result.id,
                 text=result.payload["text"],
