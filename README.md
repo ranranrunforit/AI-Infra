@@ -1,5 +1,7 @@
 ## AI Infrastructure Projects
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ranranrunforit/AI-Infra)
+
 
 **[Model API Deployment](./model_api_deployment)**
 
