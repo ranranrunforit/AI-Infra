@@ -1,0 +1,48 @@
+# robot-pipeline.service — systemd unit for robot data pipeline
+#
+# Features:
+#   - Restart=always with 1s delay — auto-recovers from crashes
+#   - WatchdogSec=15 — if main loop deadlocks (GIL, stalled C-extension),
+#     systemd kills and restarts the process after 15s without heartbeat
+#   - sd_notify(WATCHDOG=1) is called every 15s from the metrics loop
+#   - MemoryMax prevents OOM from killing other robot processes
+#   - CPUQuota enforces the 20% CPU budget at systemd level (backup for cgroup)
+
+[Unit]
+Description=Robot Data Pipeline v4
+Documentation=https://github.com/your-org/robot-pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/python3 -m robot_agent.main --config /etc/robot/pipeline.yaml
+WorkingDirectory=/opt/robot-pipeline
+User=robot
+Group=robot
+
+# Crash recovery
+Restart=always
+RestartSec=1
+
+# Watchdog: process must call sd_notify("WATCHDOG=1") within this interval
+WatchdogSec=15
+
+# Resource limits
+MemoryMax=512M
+CPUQuota=20%
+
+# Environment
+Environment=ROBOT_ID=%H
+Environment=GCS_BUCKET=robot-pipeline-v4-demo
+Environment=LOG_LEVEL=INFO
+EnvironmentFile=-/etc/robot/pipeline.env
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=robot-pipeline
+
+[Install]
+WantedBy=multi-user.target

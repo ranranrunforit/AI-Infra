@@ -1,0 +1,27 @@
+# Robot Data Pipeline v5 — Python dependencies
+
+# ── Core ──────────────────────────────────────────────────────────────────────
+pyyaml>=6.0
+prometheus-client>=0.19.0
+zstandard>=0.22.0                # MCAP compression + back-pressure zstd-9 switch
+# ── Safe expression evaluation ────────────────────────────────────────────────
+simpleeval>=0.9.13               # YAML anomaly rule compiler (replaces eval())
+# ── Cloud: GCS upload + P0 real-time alerts ───────────────────────────────────
+google-cloud-storage>=2.14.0
+google-resumable-media>=2.7.0   # RFC 7233 resumable upload + chunk-level CRC32C
+google-crc32c>=1.5.0            # CRC32C streaming during upload chunk loop
+google-cloud-pubsub>=2.18.0     # P0 anomaly alerts (~50ms, bypasses daily cap)
+# ── HTTP retry (GCS transient errors: 408/429/503) ────────────────────────────
+urllib3>=2.0.0
+# ── Sensor simulation ─────────────────────────────────────────────────────────
+numpy>=1.26.0                    # LiDAR point cloud generation + bit-shuffle compression
+Pillow>=10.0.0                   # CameraGenerator: gradient scene + HUD overlay frames
+# ── ML anomaly detection (optional — graceful fallback if unavailable) ────────
+scikit-learn>=1.4.0              # IsolationForest layer (Layer 3 of anomaly detector)
+# ── MCAP format (Foxglove-compatible) ─────────────────────────────────────────
+mcap>=1.1.0
+# ── Database (Cloud SQL via psycopg2) ─────────────────────────────────────────
+psycopg2-binary>=2.9.9
+# ── Dev / test ────────────────────────────────────────────────────────────────
+pytest>=7.4.0
+psutil>=5.9
