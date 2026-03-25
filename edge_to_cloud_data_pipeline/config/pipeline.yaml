@@ -1,0 +1,101 @@
+# config/pipeline.yaml — Robot Pipeline v5
+# Key design decisions:
+#   - Bandwidth hard ceiling: 50 Mbps (physical limit, not a policy)
+#   - CPU write cap: 20% (cgroup, leaves 80% for SLAM/navigation)
+#   - Daily cap: REMOVED — not realistic for embodied robots
+#   - MCAP rotation: 5MB OR 10s (whichever fires first)
+#   - MMCF: gates P1-P3 uploads on BW usage + CPU temperature
+#   - Thermal cutoff: if CPU >= 85°C, ALL P1-P3 blocked immediately
+#   - P0 always bypasses MMCF, goes straight to 50Mbps token bucket
+
+robot:
+  id: "robot-local-001"
+  session_id_prefix: "s"
+  schema_version: "v5"
+
+ring_buffer:
+  # Dual-trigger rotation: whichever fires first
+  rotate_size_mb:   25     # 25MB uploads in <4s at 50Mbps
+  rotate_time_sec:  30     # max 30s staleness — halved file creation rate
+  staging_dir:      "/tmp/robot_data"
+  quota_gb:         80
+
+storage:
+  root:                 "/tmp/robot_data"
+  db_path:              "meta/manifest.db"
+  rotation_secs:        30
+  rotation_bytes:       26214400    # 25 MB
+  ring_buffer_capacity: 1000
+
+bandwidth:
+  # Hard ceiling: 50 Mbps = 6,250,000 bytes/sec
+  rate_bps:         6250000
+  burst_bps:        6250000
+
+  # Adaptive probing — measures real GCS throughput every 30s
+  probe_interval_sec:    30
+  probe_size_kb:         256
+  probe_safety_margin:   0.80
+
+  # MMCF cost function: cost = W_bw * bw_usage + W_temp * cpu_temp_C + W_prio * priority
+  # P0 bypasses MMCF entirely — always goes straight to token bucket
+  # P3 at 50°C idle:          cost = 20*0   + 1*50 + 10*3 = 80   → OK
+  # P3 at 50% BW + 70°C:      cost = 20*0.5 + 1*70 + 10*3 = 110  → backoff
+  # P1 at 72°C (max sustained):cost = 20*0   + 1*72 + 10*1 = 82   → OK
+  # P1 at 80°C (near throttle):cost = 20*0   + 1*80 + 10*1 = 90   → OK
+  # NOTE: explicit thermal cutoff at throttle_temp_c overrides formula
+  #       so when temp >= 85°C ALL P1-P3 block regardless of cost
+  mmcf:
+    cost_limit:       100.0
+    backoff_sec:      0.5
+    weight_bw:        20.0
+    weight_temp:      1.0
+    weight_prio:      10.0
+    throttle_temp_c:  85.0   # hard cutoff — ALL P1-P3 block above this
+
+cpu:
+  quota_pct:  20.0         # pipeline NEVER uses more than this
+  io_weight:  200          # SLAM gets 1000 weight, pipeline gets 200
+  dry_run:    true         # set false on real hardware for actual cgroup enforcement
+
+upload:
+  poll_interval_secs:  1
+  chunk_size_bytes:    8388608   # 8 MB GCS resumable chunk
+  max_retries:         10
+  retry_status_codes:  [408, 429, 503]
+  grace_period_ms:     3600000   # 1h after UPLOADED before eviction eligible
+  grace_period_secs:   3600
+
+eviction:
+  check_interval_secs: 30
+  quota_bytes:         85899345920   # 80 GB local storage limit
+  zstd_dict_path:      "config/zstd.dict"
+
+anomaly_detection:
+  yaml_rules_path:              "config/anomaly_rules.yaml"
+  zscore_window_sec:            30
+  isolation_forest_warmup_ticks: 8640   # 24h at 10Hz
+
+monitoring:
+  prometheus_port: 9100
+
+cloud:
+  bucket:       "robot-data-pipeline-cz78-demo"
+  project_id:   "data-pipeline-cz78"
+  pubsub_topic: "robot-p0-alerts"
+
+database:
+  host:     "localhost"
+  password: ""
+  port:     5432
+  name:     "robot_pipeline"
+  user:     "pipeline"
+
+simulation:
+  sensor_hz: 1         # 1 Hz — balanced data generation vs upload drain rate
+  thermal:
+    t_ambient_C:       25.0
+    t_idle_C:          35.0
+    t_max_sustained_C: 72.0
+    t_throttle_C:      85.0
+    tau_sec:           90.0
