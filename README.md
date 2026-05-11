@@ -51,8 +51,4 @@ Terraform, Route53, AWS EKS, GCP GKE, Azure AKS, Prometheus, Grafana
 
 Go, TrainingJob CRD, Kopf, PVC, S3, GCS, NFS
 
-**[LLM Platform with RAG](./llm-rag-platform)**
-
-vLLM, RAG, Qdrant Vector DB, Terraform, Kubernetes, Prometheus, Grafana, Docker, AWS EKS, GCP GKE
-
 
